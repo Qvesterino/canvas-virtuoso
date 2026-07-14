@@ -130,13 +130,19 @@ void main(){
   vec2 uv = vUv;
   vec2 p = (uv - 0.5) * vec2(uResolution.x/uResolution.y, 1.0);
   float t = uTime * (0.15 + uFlow*0.5) + uSeed * 0.0007;
-  int variant = int(clamp(uVariant, 0.0, 3.0));
+  int variant = int(clamp(uVariant, 0.0, 9.0));
 
   vec3 fresh;
-  if (variant == 0) fresh = sourceFlow(p, t);
+  if      (variant == 0) fresh = sourceFlow(p, t);
   else if (variant == 1) fresh = sourceOrbits(p, t);
   else if (variant == 2) fresh = sourceLissajous(p, t);
-  else fresh = sourcePlumes(p, t);
+  else if (variant == 3) fresh = sourcePlumes(p, t);
+  else if (variant == 4) fresh = sourceInk(p, t);
+  else if (variant == 5) fresh = sourceFresco(p, t);
+  else if (variant == 6) fresh = sourceImpasto(p, t);
+  else if (variant == 7) fresh = sourceHarmono(p, t);
+  else if (variant == 8) fresh = sourceSpiro(p, t);
+  else                    fresh = sourcePhase(p, t);
 
   // pulse
   float pulse = 1.0 + uPulse * 0.6 * sin(uTime * 2.5);
