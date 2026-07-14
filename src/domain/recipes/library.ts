@@ -1185,7 +1185,7 @@ export const RECIPES: Recipe[] = [
     name: "Harmonograph",
     tagline: "Damped pendulum tracings on paper.",
     changes: [
-      { system: "form", path: "form.variant", value: 2 },
+      { system: "form", path: "form.variant", value: 7 },
       { system: "form", path: "form.sources", value: 3 },
       { system: "form", path: "form.brush", value: 0.22 },
       { system: "form", path: "form.intensity", value: 1.7 },
@@ -1206,7 +1206,7 @@ export const RECIPES: Recipe[] = [
     name: "Spirograph",
     tagline: "Interlocking rosettes of colored lines.",
     changes: [
-      { system: "form", path: "form.variant", value: 2 },
+      { system: "form", path: "form.variant", value: 8 },
       { system: "form", path: "form.sources", value: 8 },
       { system: "form", path: "form.brush", value: 0.2 },
       { system: "form", path: "form.intensity", value: 1.9 },
@@ -1226,7 +1226,7 @@ export const RECIPES: Recipe[] = [
     name: "Phase Portrait",
     tagline: "Coupled oscillators drawing attractor loops.",
     changes: [
-      { system: "form", path: "form.variant", value: 2 },
+      { system: "form", path: "form.variant", value: 9 },
       { system: "form", path: "form.sources", value: 5 },
       { system: "form", path: "form.brush", value: 0.24 },
       { system: "form", path: "form.intensity", value: 1.75 },
