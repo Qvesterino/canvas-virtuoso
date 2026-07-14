@@ -2,21 +2,21 @@ import type { FamilyDefinition } from "./registry";
 import type { ParamSpec, SystemId } from "../artwork/types";
 
 const form: ParamSpec[] = [
-  { path: "form.variant", label: "Architecture", kind: "scalar", min: 0, max: 5, step: 1, default: 0, hint: "0 Ring tunnel · 1 Hall of columns · 2 Menger fractal · 3 Cathedral vault · 4 Kaleidoscope · 5 Hypercube grid." },
+  { path: "form.variant", label: "Architecture", kind: "scalar", min: 0, max: 5, step: 1, default: 0, identity: true, hint: "0 Ring tunnel · 1 Hall of columns · 2 Menger fractal · 3 Cathedral vault · 4 Kaleidoscope · 5 Hypercube grid." },
   { path: "form.depth", label: "Depth", kind: "scalar", min: 0.4, max: 3, step: 0.01, default: 1.2 },
   { path: "form.twist", label: "Twist", kind: "scalar", min: -1.5, max: 1.5, step: 0.01, default: 0.5 },
-  { path: "form.rings", label: "Rings", kind: "scalar", min: 2, max: 24, step: 1, default: 10 },
+  { path: "form.rings", label: "Rings", kind: "scalar", min: 2, max: 24, step: 1, default: 10, identity: true, variantOf: [0, 1, 3] },
   { path: "form.repeat", label: "Repeat", kind: "scalar", min: 0.6, max: 4, step: 0.01, default: 1.6, hint: "Spacing of repeated architecture." },
   { path: "form.cameraSway", label: "Camera Sway", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.35 },
   // ── Kaleidoscope (variant 4) ────────────────────────────────────────
-  { path: "form.mirrors", label: "Mirrors", kind: "scalar", min: 2, max: 16, step: 1, default: 6, hint: "Radial symmetry order — number of mirror wedges." },
-  { path: "form.symmetry", label: "Symmetry", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.85, hint: "Sharpness of the mirrored reflections." },
-  { path: "form.ripple", label: "Ripple", kind: "scalar", min: 0, max: 1.5, step: 0.01, default: 0.4, hint: "Radial wave distortion." },
-  { path: "form.rotation", label: "Rotation", kind: "scalar", min: -2, max: 2, step: 0.01, default: 0.25, hint: "Spin of the kaleidoscope core." },
-  { path: "form.kernel", label: "Kernel", kind: "scalar", min: 0, max: 3, step: 1, default: 1, hint: "Which motif fills each wedge: 0 stripes · 1 petals · 2 crystals · 3 galaxy." },
+  { path: "form.mirrors", label: "Mirrors", kind: "scalar", min: 2, max: 16, step: 1, default: 6, identity: true, variantOf: [4], hint: "Radial symmetry order — number of mirror wedges." },
+  { path: "form.symmetry", label: "Symmetry", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.85, variantOf: [4], hint: "Sharpness of the mirrored reflections." },
+  { path: "form.ripple", label: "Ripple", kind: "scalar", min: 0, max: 1.5, step: 0.01, default: 0.4, variantOf: [4], hint: "Radial wave distortion." },
+  { path: "form.rotation", label: "Rotation", kind: "scalar", min: -2, max: 2, step: 0.01, default: 0.25, variantOf: [4], hint: "Spin of the kaleidoscope core." },
+  { path: "form.kernel", label: "Kernel", kind: "scalar", min: 0, max: 3, step: 1, default: 1, identity: true, variantOf: [4], hint: "Which motif fills each wedge: 0 stripes · 1 petals · 2 crystals · 3 galaxy." },
   // ── Hypercube grid (variant 5) ──────────────────────────────────────
-  { path: "form.cells", label: "Cells", kind: "scalar", min: 1, max: 8, step: 1, default: 4, hint: "Grid tessellation density." },
-  { path: "form.projection", label: "Projection", kind: "scalar", min: 0, max: 1.5, step: 0.01, default: 0.7, hint: "4D→3D projection strength." },
+  { path: "form.cells", label: "Cells", kind: "scalar", min: 1, max: 8, step: 1, default: 4, identity: true, variantOf: [5], hint: "Grid tessellation density." },
+  { path: "form.projection", label: "Projection", kind: "scalar", min: 0, max: 1.5, step: 0.01, default: 0.7, variantOf: [5], hint: "4D→3D projection strength." },
 ];
 
 const motion: ParamSpec[] = [
@@ -51,4 +51,13 @@ export const spatialIllusionsFamily: FamilyDefinition = {
   requiredSystems: ["form", "output"],
   schema,
   implemented: true,
+  variantParam: "form.variant",
+  variantNames: [
+    "Ring tunnel",
+    "Hall of columns",
+    "Menger fractal",
+    "Cathedral vault",
+    "Kaleidoscope",
+    "Hypercube grid",
+  ],
 };
