@@ -13,6 +13,10 @@ export interface Pipeline {
   /** Pipeline-owned uniforms, excluding base uResolution/uTime/uSeed. */
   uniforms: readonly string[];
   project(artwork: Artwork): Record<string, UniformValue>;
+  /** If true, the renderer allocates ping-pong FBOs and binds `uPrev` to the
+   *  previous frame's color texture. Pipelines are then responsible for
+   *  reading it (persistence, bleed, feedback trails, etc.). */
+  feedback?: boolean;
 }
 
 export function paramNum(
