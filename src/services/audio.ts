@@ -8,7 +8,7 @@ class AudioService {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private stream: MediaStream | null = null;
-  private data: Uint8Array | null = null;
+  private data: Uint8Array<ArrayBuffer> | null = null;
   private raf = 0;
   private listeners = new Set<Listener>();
 
