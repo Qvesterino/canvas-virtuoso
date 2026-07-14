@@ -305,7 +305,7 @@ export const RECIPES: Recipe[] = [
     name: "Ink Storm",
     tagline: "Violent black ink whipping across paper.",
     changes: [
-      { system: "form", path: "form.variant", value: 0 },
+      { system: "form", path: "form.variant", value: 4 },
       { system: "form", path: "form.brush", value: 1.2 },
       { system: "form", path: "form.strokes", value: 5 },
       { system: "form", path: "form.intensity", value: 2.1 },
@@ -326,7 +326,7 @@ export const RECIPES: Recipe[] = [
     name: "Fresco",
     tagline: "Slow chalky pigment settling on plaster.",
     changes: [
-      { system: "form", path: "form.variant", value: 0 },
+      { system: "form", path: "form.variant", value: 5 },
       { system: "form", path: "form.brush", value: 0.7 },
       { system: "form", path: "form.strokes", value: 3 },
       { system: "form", path: "form.intensity", value: 1.7 },
@@ -347,7 +347,7 @@ export const RECIPES: Recipe[] = [
     name: "Oil",
     tagline: "Thick impasto smearing slowly.",
     changes: [
-      { system: "form", path: "form.variant", value: 0 },
+      { system: "form", path: "form.variant", value: 6 },
       { system: "form", path: "form.brush", value: 1.4 },
       { system: "form", path: "form.strokes", value: 4 },
       { system: "form", path: "form.intensity", value: 1.85 },
