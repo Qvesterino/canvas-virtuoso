@@ -24,6 +24,9 @@ export interface AppState {
   playing: boolean;
   hydrated: boolean;
   audioEnabled: boolean;
+  memoryFrozen: boolean;
+  memoryClearNonce: number;
+  exportOpen: boolean;
 }
 
 export type Command =
@@ -51,6 +54,9 @@ export type Command =
   | { type: "removeModulationRoute"; id: string }
   | { type: "updateModulationRoute"; id: string; patch: Partial<Omit<ModulationRoute, "id">> }
   | { type: "setAudioEnabled"; enabled: boolean }
+  | { type: "setMemoryFrozen"; frozen: boolean }
+  | { type: "clearMemory" }
+  | { type: "setExportOpen"; open: boolean }
   | { type: "hydrateProject"; project: Project }
   | { type: "markHydrated" };
 
@@ -235,6 +241,15 @@ function apply(state: AppState, cmd: Command): AppState {
     case "setAudioEnabled": {
       return state.audioEnabled === cmd.enabled ? state : { ...state, audioEnabled: cmd.enabled };
     }
+    case "setMemoryFrozen": {
+      return state.memoryFrozen === cmd.frozen ? state : { ...state, memoryFrozen: cmd.frozen };
+    }
+    case "clearMemory": {
+      return { ...state, memoryClearNonce: state.memoryClearNonce + 1 };
+    }
+    case "setExportOpen": {
+      return state.exportOpen === cmd.open ? state : { ...state, exportOpen: cmd.open };
+    }
     case "undo": {
       if (state.history.past.length === 0) return state;
       const past = state.history.past.slice(0, -1);
@@ -353,6 +368,9 @@ let state: AppState = {
   playing: true,
   hydrated: false,
   audioEnabled: false,
+  memoryFrozen: false,
+  memoryClearNonce: 0,
+  exportOpen: false,
 };
 
 const listeners = new Set<Listener>();
