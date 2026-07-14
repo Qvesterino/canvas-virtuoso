@@ -3,6 +3,8 @@ import { getPipeline, type Pipeline } from "./pipelines";
 import type { UniformValue } from "./pipelines/types";
 import type { Artwork, FamilyId } from "../domain/artwork/types";
 import { TimeSource } from "../services/time";
+import { sampleSignals } from "../services/signals";
+import { applyModulation } from "../domain/modulation/engine";
 
 export type RendererStatus =
   | { kind: "idle" }
@@ -141,7 +143,9 @@ export class Renderer {
     const t = this.time.tick(now);
 
     try {
-      const artwork = this.hooks.getArtwork();
+      const baseArtwork = this.hooks.getArtwork();
+      const signals = sampleSignals(t);
+      const artwork = applyModulation(baseArtwork, signals);
       if (artwork.family !== this.activeFamily) {
         if (!this.usePipeline(artwork.family)) return;
       }

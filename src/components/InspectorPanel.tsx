@@ -2,6 +2,8 @@ import { useState } from "react";
 import { dispatch, useActiveArtwork, useAppState } from "../domain/artwork/store";
 import { getFamily } from "../domain/families/registry";
 import type { ParamValue, SystemId } from "../domain/artwork/types";
+import { MODULATION_SOURCES } from "../domain/modulation/sources";
+import { routeForTarget } from "../domain/modulation/engine";
 
 const SYSTEM_ORDER: SystemId[] = [
   "form", "motion", "forces", "material", "light", "atmosphere", "memory", "color", "output",
@@ -116,6 +118,7 @@ export function InspectorPanel() {
                     system?.parameters[spec.path] ?? (spec.default as ParamValue);
                   const locked = isPathLocked(spec.path);
                   if (spec.kind === "scalar" && typeof value === "number") {
+                    const route = routeForTarget(artwork, spec.path);
                     return (
                       <div key={spec.path}>
                         <div className="mb-1 flex items-baseline justify-between gap-2">
@@ -135,9 +138,34 @@ export function InspectorPanel() {
                             </button>
                             {spec.label}
                           </label>
-                          <span className="text-mono text-[10px] text-muted-foreground">
-                            {value.toFixed(spec.step && spec.step < 0.1 ? 3 : 2)}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (route) {
+                                  dispatch({ type: "removeModulationRoute", id: route.id });
+                                } else {
+                                  dispatch({
+                                    type: "addModulationRoute",
+                                    target: spec.path,
+                                    source: "time.slow",
+                                  });
+                                }
+                              }}
+                              className={[
+                                "rounded px-1 text-mono text-[9px] uppercase tracking-wider",
+                                route
+                                  ? "bg-signal/20 text-signal"
+                                  : "text-muted-foreground/60 hover:text-foreground",
+                              ].join(" ")}
+                              title={route ? "Remove modulation" : "Modulate this parameter"}
+                            >
+                              ~
+                            </button>
+                            <span className="text-mono text-[10px] text-muted-foreground">
+                              {value.toFixed(spec.step && spec.step < 0.1 ? 3 : 2)}
+                            </span>
+                          </div>
                         </div>
                         <input
                           type="range"
@@ -156,6 +184,59 @@ export function InspectorPanel() {
                           }
                           className="w-full accent-primary disabled:opacity-40"
                         />
+                        {route && (
+                          <div className="mt-1 flex items-center gap-1.5 rounded border border-panel-border/60 bg-white/[0.02] px-1.5 py-1">
+                            <select
+                              value={route.source}
+                              onChange={(e) =>
+                                dispatch({
+                                  type: "updateModulationRoute",
+                                  id: route.id,
+                                  patch: { source: e.target.value },
+                                })
+                              }
+                              className="min-w-0 flex-1 rounded bg-transparent text-[10px] text-mono text-muted-foreground focus:outline-none"
+                            >
+                              {MODULATION_SOURCES.map((s) => (
+                                <option key={s.id} value={s.id} className="bg-panel-surface">
+                                  {s.label}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="range"
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              value={route.depth}
+                              onChange={(e) =>
+                                dispatch({
+                                  type: "updateModulationRoute",
+                                  id: route.id,
+                                  patch: { depth: Number(e.target.value) },
+                                })
+                              }
+                              className="w-16 accent-signal"
+                              title="Depth"
+                            />
+                            <select
+                              value={route.polarity}
+                              onChange={(e) =>
+                                dispatch({
+                                  type: "updateModulationRoute",
+                                  id: route.id,
+                                  patch: { polarity: e.target.value as typeof route.polarity },
+                                })
+                              }
+                              className="rounded bg-transparent text-[10px] text-mono text-muted-foreground focus:outline-none"
+                              title="Polarity"
+                            >
+                              <option value="bipolar" className="bg-panel-surface">±</option>
+                              <option value="positive" className="bg-panel-surface">+</option>
+                              <option value="negative" className="bg-panel-surface">−</option>
+                            </select>
+                          </div>
+                        )}
                         {spec.hint && mode === "expert" && (
                           <div className="mt-1 text-[10px] text-muted-foreground">
                             {spec.hint}
