@@ -49,7 +49,7 @@ class AudioService {
       this.ctx = ctx;
       this.analyser = analyser;
       this.stream = stream;
-      this.data = new Uint8Array(analyser.frequencyBinCount);
+      this.data = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
       this.enabled = true;
       this.error = null;
       this.loop();
