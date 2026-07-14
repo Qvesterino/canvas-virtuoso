@@ -2,10 +2,10 @@ import type { FamilyDefinition } from "./registry";
 import type { ParamSpec, SystemId } from "../artwork/types";
 
 const form: ParamSpec[] = [
-  { path: "form.variant", label: "Source", kind: "scalar", min: 0, max: 3, step: 1, default: 0, hint: "0 Flow field · 1 Orbits · 2 Lissajous · 3 Plumes." },
+  { path: "form.variant", label: "Source", kind: "scalar", min: 0, max: 3, step: 1, default: 0, identity: true, hint: "0 Flow field · 1 Orbits · 2 Lissajous · 3 Plumes." },
   { path: "form.brush", label: "Brush Size", kind: "scalar", min: 0.1, max: 2, step: 0.01, default: 0.6 },
-  { path: "form.strokes", label: "Strokes", kind: "scalar", min: 1, max: 6, step: 1, default: 3 },
-  { path: "form.sources", label: "Sources", kind: "scalar", min: 1, max: 8, step: 1, default: 4, hint: "Number of live paint emitters." },
+  { path: "form.strokes", label: "Strokes", kind: "scalar", min: 1, max: 6, step: 1, default: 3, identity: true },
+  { path: "form.sources", label: "Sources", kind: "scalar", min: 1, max: 8, step: 1, default: 4, identity: true, hint: "Number of live paint emitters." },
   { path: "form.intensity", label: "Intensity", kind: "scalar", min: 0.1, max: 2.5, step: 0.01, default: 1.0, hint: "How strongly fresh paint deposits." },
 ];
 
@@ -41,4 +41,6 @@ export const temporalPaintingsFamily: FamilyDefinition = {
   requiredSystems: ["memory", "output"],
   schema,
   implemented: true,
+  variantParam: "form.variant",
+  variantNames: ["Flow field", "Orbits", "Lissajous", "Plumes"],
 };
