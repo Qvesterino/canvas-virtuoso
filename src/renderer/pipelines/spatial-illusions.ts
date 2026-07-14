@@ -113,14 +113,17 @@ float sdBoxFrame(vec3 p, vec3 b, float e){
 float sceneHyper(vec3 p){
   float rep = max(1.6 / max(uCells, 1.0), 0.35) * max(uRepeat, 0.6);
   vec3 q = p;
-  float ca = cos(uTime*0.2), sa = sin(uTime*0.2);
+  // NOTE: rotate at uSpeed — previously hard-coded, which made "Cube Cascade"
+  // and "Tesseract Grid" spin so fast they were unusable even at speed=0.1.
+  float ts = uTime * max(uSpeed, 0.0);
+  float ca = cos(ts*0.35), sa = sin(ts*0.35);
   q.xy = mat2(ca, -sa, sa, ca) * q.xy;
-  float cb = cos(uTime*0.15 + uTwist), sb = sin(uTime*0.15 + uTwist);
+  float cb = cos(ts*0.25 + uTwist), sb = sin(ts*0.25 + uTwist);
   q.xz = mat2(cb, -sb, sb, cb) * q.xz;
   q = mod(q + rep*0.5, rep) - rep*0.5;
   float outer = sdBoxFrame(q, vec3(rep*0.42), 0.03);
   // Inner projected cube — the 4D→3D "shadow" that pulses in scale.
-  float pulse = 1.0 + uProjection * (0.4 + 0.35*sin(uTime*0.9));
+  float pulse = 1.0 + uProjection * (0.4 + 0.35*sin(ts*1.2));
   float inner = sdBoxFrame(q * pulse, vec3(rep*0.24), 0.02) / pulse;
   return min(outer, inner);
 }

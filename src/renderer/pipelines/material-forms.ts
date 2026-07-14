@@ -114,13 +114,80 @@ float sceneDome(vec3 p, float t){
   return smin(dome, ground, uSmoothness*1.5);
 }
 
+// Distance to a polyline approximation of a parametric (p,q) torus knot.
+// Cheap enough for realtime raymarching at ~24 segments.
+float sdTorusKnot(vec3 pos, float R, float rr, float thick, float pw, float qw, float phase){
+  float d = 1e5;
+  const int N = 24;
+  vec3 prev;
+  for (int i = 0; i <= N; i++){
+    float u = float(i) / float(N) * 6.28318;
+    float cs = cos(qw * u + phase);
+    float sn = sin(qw * u + phase);
+    float rad = R + rr * cs;
+    vec3 c = vec3(rad * cos(pw * u), rad * sin(pw * u), rr * sn);
+    if (i > 0){
+      vec3 pa = pos - prev;
+      vec3 ba = c - prev;
+      float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+      d = min(d, length(pa - ba * h));
+    }
+    prev = c;
+  }
+  return d - thick;
+}
+
+// variant 4 — Knot family. uCluster picks the knot type:
+//   1 = simple ring, 2 = trefoil (2,3), 3 = cinquefoil (2,5), 4 = (3,4),
+//   5 = chaos knot (asymmetric high-winding with deformation).
+float sceneKnot(vec3 p, float t){
+  int k = int(clamp(uCluster, 1.0, 5.0));
+  float R = uSize * 1.0;
+  float rr = uSize * 0.35;
+  float th = uSize * 0.14;
+  mat3 rot = rotY(t * 0.15) * rotX(uCameraTilt * 0.6);
+  vec3 q = rot * p;
+  q += (fbm3(q*3.0 + t*0.3) - 0.5) * uDeform * 0.18;
+  float d;
+  if (k == 1)      d = sdTorusKnot(q, R, rr, th, 1.0, 1.0, 0.0);
+  else if (k == 2) d = sdTorusKnot(q, R, rr, th, 2.0, 3.0, uTwist);
+  else if (k == 3) d = sdTorusKnot(q, R, rr, th, 2.0, 5.0, uTwist);
+  else if (k == 4) d = sdTorusKnot(q, R, rr, th, 3.0, 4.0, uTwist);
+  else {
+    float a = sdTorusKnot(q, R, rr*0.9, th, 3.0, 7.0, uTwist);
+    float b = sdTorusKnot(rotY(1.3)*q, R*0.85, rr*0.7, th*0.9, 2.0, 5.0, -uTwist*1.4);
+    d = smin(a, b, uSmoothness);
+  }
+  return d;
+}
+
+// variant 5 — Linked ring chain along the Y axis, alternating orientations.
+float sceneChain(vec3 p, float t){
+  float count = clamp(uCluster, 2.0, 6.0);
+  float spacing = uSize * 1.4;
+  // Repeat along Y, with slow drift so the chain feels alive.
+  vec3 q = p;
+  q.y += t * 0.2;
+  float idx = clamp(floor((q.y + spacing*count*0.5) / spacing), 0.0, count - 1.0);
+  q.y -= (idx - (count-1.0)*0.5) * spacing;
+  q = rotY(t*0.1 + idx*0.7) * q;
+  vec2 tsz = vec2(uSize*0.75, uSize*0.22);
+  // Alternate the ring axis by index parity.
+  float parity = mod(idx, 2.0);
+  vec3 qa = mix(q, vec3(q.x, q.z, q.y), parity);
+  return sdTorus(qa, tsz)
+       + (fbm3(q*4.0 + t*0.3) - 0.5) * uDeform * 0.08;
+}
+
 float scene(vec3 p){
   float t = uTime * 0.4;
-  int v = int(clamp(uVariant, 0.0, 3.0));
+  int v = int(clamp(uVariant, 0.0, 5.0));
   if (v == 0) return sceneBlobs(p, t);
   if (v == 1) return sceneTorus(p, t);
   if (v == 2) return sceneLattice(p, t);
-  return sceneDome(p, t);
+  if (v == 3) return sceneDome(p, t);
+  if (v == 4) return sceneKnot(p, t);
+  return sceneChain(p, t);
 }
 
 vec3 normal(vec3 p){
