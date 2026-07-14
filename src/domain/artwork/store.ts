@@ -9,8 +9,10 @@ import type {
   FamilyId,
   Recipe,
   Snapshot,
+  ModulationRoute,
 } from "./types";
 import { createProject, createArtwork, newSnapshotId } from "./factories";
+import { mutateArtwork as engineMutate, randomizeArtwork as engineRandomize, remixArtworks } from "../mutation/engine";
 
 const MAX_HISTORY = 50;
 
@@ -21,6 +23,7 @@ export interface AppState {
   inspectedSystem: SystemId;
   playing: boolean;
   hydrated: boolean;
+  audioEnabled: boolean;
 }
 
 export type Command =
@@ -41,6 +44,13 @@ export type Command =
   | { type: "deleteSnapshot"; snapshotId: string }
   | { type: "toggleLock"; target: string }
   | { type: "applyRecipe"; recipe: Recipe }
+  | { type: "mutateArtwork"; strength?: number }
+  | { type: "randomizeArtwork" }
+  | { type: "remixWithSnapshot"; snapshotId: string; blend?: number }
+  | { type: "addModulationRoute"; target: ParamPath; source: string }
+  | { type: "removeModulationRoute"; id: string }
+  | { type: "updateModulationRoute"; id: string; patch: Partial<Omit<ModulationRoute, "id">> }
+  | { type: "setAudioEnabled"; enabled: boolean }
   | { type: "hydrateProject"; project: Project }
   | { type: "markHydrated" };
 
@@ -175,6 +185,56 @@ function apply(state: AppState, cmd: Command): AppState {
         return { ...a, systems, lineage: { ...a.lineage, recipeId: cmd.recipe.id } };
       });
     }
+    case "mutateArtwork": {
+      return mutateArtwork(state, (a) => engineMutate(a, cmd.strength ?? 0.5));
+    }
+    case "randomizeArtwork": {
+      return mutateArtwork(state, (a) => engineRandomize(a));
+    }
+    case "remixWithSnapshot": {
+      const snap = state.project.snapshots.find((s) => s.id === cmd.snapshotId);
+      if (!snap) return state;
+      return mutateArtwork(state, (a) => remixArtworks(a, snap.artwork, cmd.blend ?? 0.5));
+    }
+    case "addModulationRoute": {
+      return mutateArtwork(state, (a) => {
+        const existing = a.modulationRoutes.find((r) => r.target === cmd.target);
+        if (existing && existing.source === cmd.source) return a;
+        const route: ModulationRoute = {
+          id: `mod_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36)}`,
+          source: cmd.source,
+          target: cmd.target,
+          depth: 0.4,
+          polarity: "bipolar",
+          curve: "linear",
+          smoothing: 0,
+        };
+        const routes = existing
+          ? a.modulationRoutes.map((r) => (r.id === existing.id ? { ...r, source: cmd.source } : r))
+          : [...a.modulationRoutes, route];
+        return { ...a, modulationRoutes: routes };
+      });
+    }
+    case "removeModulationRoute": {
+      return mutateArtwork(state, (a) => {
+        if (!a.modulationRoutes.some((r) => r.id === cmd.id)) return a;
+        return { ...a, modulationRoutes: a.modulationRoutes.filter((r) => r.id !== cmd.id) };
+      });
+    }
+    case "updateModulationRoute": {
+      return mutateArtwork(state, (a) => {
+        let changed = false;
+        const routes = a.modulationRoutes.map((r) => {
+          if (r.id !== cmd.id) return r;
+          changed = true;
+          return { ...r, ...cmd.patch };
+        });
+        return changed ? { ...a, modulationRoutes: routes } : a;
+      });
+    }
+    case "setAudioEnabled": {
+      return state.audioEnabled === cmd.enabled ? state : { ...state, audioEnabled: cmd.enabled };
+    }
     case "undo": {
       if (state.history.past.length === 0) return state;
       const past = state.history.past.slice(0, -1);
@@ -292,6 +352,7 @@ let state: AppState = {
   inspectedSystem: "form",
   playing: true,
   hydrated: false,
+  audioEnabled: false,
 };
 
 const listeners = new Set<Listener>();
