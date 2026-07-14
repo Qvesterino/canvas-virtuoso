@@ -68,6 +68,7 @@ export type Command =
   | { type: "applyPalette"; palette: Palette }
   | { type: "applyMacro"; macroId: string; value: number }
   | { type: "dismissOnboarding" }
+  | { type: "revealOnboarding" }
   | { type: "toggleDiagnostics" };
 
 type Listener = () => void;
@@ -356,6 +357,9 @@ function apply(state: AppState, cmd: Command): AppState {
         localStorage.setItem("shader-lab.onboarded", "1");
       } catch {}
       return { ...state, onboardingDismissed: true };
+    }
+    case "revealOnboarding": {
+      return state.onboardingDismissed ? { ...state, onboardingDismissed: false } : state;
     }
     case "toggleDiagnostics": {
       return { ...state, diagnosticsOpen: !state.diagnosticsOpen };
