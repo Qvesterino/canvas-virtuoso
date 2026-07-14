@@ -5,7 +5,7 @@ const form: ParamSpec[] = [
   { path: "form.variant", label: "Form", kind: "scalar", min: 0, max: 3, step: 1, default: 0, identity: true, hint: "0 Blob cluster · 1 Twisted torus · 2 Octahedral lattice · 3 Liquid dome." },
   { path: "form.size", label: "Size", kind: "scalar", min: 0.2, max: 1.2, step: 0.01, default: 0.6, hint: "Overall mass of the sculpted body." },
   { path: "form.smoothness", label: "Smoothness", kind: "scalar", min: 0.02, max: 0.5, step: 0.005, default: 0.18, hint: "How gently masses blend into each other." },
-  { path: "form.cluster", label: "Cluster", kind: "scalar", min: 1, max: 5, step: 1, default: 3, identity: true, hint: "How many sub-forms merge." },
+  { path: "form.cluster", label: "Cluster", kind: "scalar", min: 1, max: 8, step: 1, default: 3, identity: true, hint: "Sub-forms / knot topology (variant 4: 1 ring · 2 trefoil · 3 cinquefoil · 4 (3,4) · 5 chaos · 6 granny · 7 (5,7) star · 8 triple braid)." },
   { path: "form.deform", label: "Deform", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.25, hint: "Surface displacement and breathing." },
   { path: "form.twist", label: "Twist", kind: "scalar", min: -2, max: 2, step: 0.01, default: 0.4, hint: "Axial twist through the body." },
   { path: "form.cameraDist", label: "Distance", kind: "scalar", min: 1.6, max: 5, step: 0.01, default: 2.6 },

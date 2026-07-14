@@ -139,9 +139,12 @@ float sdTorusKnot(vec3 pos, float R, float rr, float thick, float pw, float qw, 
 
 // variant 4 — Knot family. uCluster picks the knot type:
 //   1 = simple ring, 2 = trefoil (2,3), 3 = cinquefoil (2,5), 4 = (3,4),
-//   5 = chaos knot (asymmetric high-winding with deformation).
+//   5 = chaos knot (asymmetric high-winding with deformation),
+//   6 = granny knot (two trefoils composed & mirrored — non-invertible),
+//   7 = (5,7) star knot (high-winding, dense petals, tight self-crossings),
+//   8 = triple braid (three helical strands woven around a common axis).
 float sceneKnot(vec3 p, float t){
-  int k = int(clamp(uCluster, 1.0, 5.0));
+  int k = int(clamp(uCluster, 1.0, 8.0));
   float R = uSize * 1.0;
   float rr = uSize * 0.35;
   float th = uSize * 0.14;
@@ -153,10 +156,31 @@ float sceneKnot(vec3 p, float t){
   else if (k == 2) d = sdTorusKnot(q, R, rr, th, 2.0, 3.0, uTwist);
   else if (k == 3) d = sdTorusKnot(q, R, rr, th, 2.0, 5.0, uTwist);
   else if (k == 4) d = sdTorusKnot(q, R, rr, th, 3.0, 4.0, uTwist);
-  else {
+  else if (k == 5) {
     float a = sdTorusKnot(q, R, rr*0.9, th, 3.0, 7.0, uTwist);
     float b = sdTorusKnot(rotY(1.3)*q, R*0.85, rr*0.7, th*0.9, 2.0, 5.0, -uTwist*1.4);
     d = smin(a, b, uSmoothness);
+  } else if (k == 6) {
+    // Granny knot: two identical trefoils summed with a mirror on one —
+    // topologically DIFFERENT from a square knot (chirality matches),
+    // producing a lumpy, self-tightening tangle instead of clean lobes.
+    vec3 qa = q; qa.x += R*0.55;
+    vec3 qb = q; qb.x -= R*0.55; qb.z = -qb.z;
+    float a = sdTorusKnot(qa, R*0.7, rr*0.7, th, 2.0, 3.0, uTwist);
+    float b = sdTorusKnot(qb, R*0.7, rr*0.7, th, 2.0, 3.0, uTwist + 3.14159);
+    d = smin(a, b, uSmoothness * 1.6);
+  } else if (k == 7) {
+    // (5,7) star knot: high winding (five loops around the torus axis,
+    // seven around the tube), so the SDF is a dense spiky rosette
+    // instead of the trefoil's three fat lobes.
+    d = sdTorusKnot(q, R*1.05, rr*0.75, th*0.85, 5.0, 7.0, uTwist);
+  } else {
+    // Triple braid: three offset (1,1) helices phase-shifted by 120°
+    // wound around the same axis — reads as a rope, not a knot ring.
+    float a = sdTorusKnot(q, R, rr*0.5, th*0.9, 1.0, 6.0, uTwist);
+    float b = sdTorusKnot(q, R, rr*0.5, th*0.9, 1.0, 6.0, uTwist + 2.094);
+    float c = sdTorusKnot(q, R, rr*0.5, th*0.9, 1.0, 6.0, uTwist + 4.188);
+    d = smin(smin(a, b, uSmoothness*0.6), c, uSmoothness*0.6);
   }
   return d;
 }
