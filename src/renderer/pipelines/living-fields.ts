@@ -30,45 +30,56 @@ float hash(vec2 p){
   p += dot(p, p + 45.32);
   return fract(p.x * p.y);
 }
+// Quintic Hermite for C2-continuous interpolation — critical for smoothness.
 float vnoise(vec2 p){
   vec2 i = floor(p), f = fract(p);
   float a = hash(i);
   float b = hash(i + vec2(1,0));
   float c = hash(i + vec2(0,1));
   float d = hash(i + vec2(1,1));
-  vec2 u = f*f*(3.0-2.0*f);
+  vec2 u = f*f*f*(f*(f*6.0-15.0)+10.0);
   return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
 }
-float fbm(vec2 p, int oct){
-  float v = 0.0, amp = 0.5;
+// Band-limited fbm: attenuates octaves finer than the pixel footprint to kill
+// aliasing and moiré. pxFreq is the screen-space frequency of one texel in
+// the domain of `p`.
+float fbm(vec2 p, int oct, float pxFreq){
+  float v = 0.0, amp = 0.5, freq = 1.0, norm = 0.0;
   mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
   for (int i = 0; i < 6; i++){
     if (i >= oct) break;
-    v += amp * vnoise(p);
+    // Roll off octaves as they approach the Nyquist limit.
+    float w = smoothstep(1.0, 0.35, pxFreq * freq);
+    v += amp * w * vnoise(p);
+    norm += amp * w;
     p = rot * p * 2.02 + vec2(37.0, 17.0);
     amp *= 0.5;
+    freq *= 2.02;
   }
-  return v;
+  return norm > 1e-4 ? v / (norm * 2.0) + 0.25 : 0.5;
 }
-float ridged(vec2 p, int oct){
-  float v = 0.0, amp = 0.5;
+float ridged(vec2 p, int oct, float pxFreq){
+  float v = 0.0, amp = 0.5, freq = 1.0, norm = 0.0;
   mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
   for (int i = 0; i < 6; i++){
     if (i >= oct) break;
+    float w = smoothstep(1.0, 0.35, pxFreq * freq);
     float n = 1.0 - abs(vnoise(p) * 2.0 - 1.0);
     n *= n;
-    v += amp * n;
+    v += amp * w * n;
+    norm += amp * w;
     p = rot * p * 2.1 + 7.3;
     amp *= 0.5;
+    freq *= 2.1;
   }
-  return v;
+  return norm > 1e-4 ? v / (norm * 2.0) + 0.25 : 0.5;
 }
-vec2 curl(vec2 p, float t){
-  float e = 0.1;
-  float n1 = fbm(p + vec2(0.0, t*0.3), 4);
-  float n2 = fbm(p + vec2(5.2, -t*0.25), 4);
-  float d1 = (fbm(p + vec2(0.0, e), 4) - fbm(p - vec2(0.0, e), 4)) / (2.0*e);
-  float d2 = (fbm(p + vec2(e, 0.0), 4) - fbm(p - vec2(e, 0.0), 4)) / (2.0*e);
+vec2 curl(vec2 p, float t, float pxFreq){
+  float e = 0.15;
+  float n1 = fbm(p + vec2(0.0, t*0.3), 4, pxFreq);
+  float n2 = fbm(p + vec2(5.2, -t*0.25), 4, pxFreq);
+  float d1 = (fbm(p + vec2(0.0, e), 4, pxFreq) - fbm(p - vec2(0.0, e), 4, pxFreq)) / (2.0*e);
+  float d2 = (fbm(p + vec2(e, 0.0), 4, pxFreq) - fbm(p - vec2(e, 0.0), 4, pxFreq)) / (2.0*e);
   return vec2(n1 * 0.2 + d1, n2 * 0.2 - d2);
 }
 vec3 palette(float t){
@@ -77,32 +88,33 @@ vec3 palette(float t){
   return a + b * cos(6.28318 * (c * t + d));
 }
 
-float fieldCosmic(vec2 p, float t, int oct){
-  vec2 q = vec2(fbm(p + vec2(0.0, t*0.6), oct),
-                fbm(p + vec2(5.2, -t*0.5), oct));
-  vec2 r = vec2(fbm(p + 4.0*q + vec2(1.7 + t*uTurbulence, 9.2), oct),
-                fbm(p + 4.0*q + vec2(8.3, 2.8 - t*uTurbulence), oct));
-  return fbm(p + uWarp * 4.0 * r + vec2(uDrift*t, 0.0), oct);
+float fieldCosmic(vec2 p, float t, int oct, float px){
+  vec2 q = vec2(fbm(p + vec2(0.0, t*0.6), oct, px),
+                fbm(p + vec2(5.2, -t*0.5), oct, px));
+  vec2 r = vec2(fbm(p + 4.0*q + vec2(1.7 + t*uTurbulence, 9.2), oct, px),
+                fbm(p + 4.0*q + vec2(8.3, 2.8 - t*uTurbulence), oct, px));
+  return fbm(p + uWarp * 4.0 * r + vec2(uDrift*t, 0.0), oct, px);
 }
-float fieldCurl(vec2 p, float t, int oct){
-  // advect by curl-like flow for coherent large-scale streaks
+float fieldCurl(vec2 p, float t, int oct, float px){
   vec2 q = p;
   for (int i = 0; i < 3; i++){
-    q += curl(q * 0.9 + vec2(t*0.15, uDrift*t), t) * (0.35 + uTurbulence*0.4);
+    q += curl(q * 0.9 + vec2(t*0.15, uDrift*t), t, px) * (0.35 + uTurbulence*0.4);
   }
-  return fbm(q * 1.2 + vec2(t*0.1, 0.0), oct);
+  return fbm(q * 1.2 + vec2(t*0.1, 0.0), oct, px);
 }
-float fieldRidged(vec2 p, float t, int oct){
+float fieldRidged(vec2 p, float t, int oct, float px){
   vec2 q = p * 1.4;
-  q += 0.6 * uWarp * vec2(fbm(q + t*0.2, oct), fbm(q + 5.0 - t*0.2, oct));
-  return ridged(q + vec2(uDrift*t, t*0.05), oct);
+  q += 0.6 * uWarp * vec2(fbm(q + t*0.2, oct, px), fbm(q + 5.0 - t*0.2, oct, px));
+  return ridged(q + vec2(uDrift*t, t*0.05), oct, px);
 }
-float fieldCells(vec2 p, float t, int oct){
-  // reaction-cell approximation: two competing fbms interfered
-  float a = fbm(p * 1.3 + vec2(t*0.2, 0.0), oct);
-  float b = fbm(p * 2.6 - vec2(0.0, t*0.15), oct);
-  float c = smoothstep(0.35, 0.65, a - b*0.6 + 0.5);
-  return c * 0.7 + a * 0.3;
+float fieldCells(vec2 p, float t, int oct, float px){
+  float a = fbm(p * 1.3 + vec2(t*0.2, 0.0), oct, px);
+  float b = fbm(p * 2.6 - vec2(0.0, t*0.15), oct, px * 2.0);
+  // AA the hard step by its own derivative
+  float edge = a - b*0.6 + 0.5;
+  float w = max(fwidth(edge), 0.01);
+  float c = smoothstep(0.5 - w, 0.5 + w, edge);
+  return c * 0.65 + a * 0.35;
 }
 
 void main(){
@@ -110,17 +122,21 @@ void main(){
   vec2 p = (uv - 0.5) * vec2(uResolution.x/uResolution.y, 1.0);
   p *= uDensity * uScale;
   float t = uTime * uSpeed + uSeed * 0.001;
+  // Effective octaves scaled by band-limit so extra octaves cost nothing
+  // when they'd alias.
   int oct = int(clamp(uDetail, 1.0, 6.0));
+  // Screen-space frequency of one pixel in `p` domain (average |d p / d frag|).
+  float px = max(length(fwidth(p)), 1e-4);
   int variant = int(clamp(uVariant, 0.0, 3.0));
 
   float f;
-  if (variant == 0) f = fieldCosmic(p, t, oct);
-  else if (variant == 1) f = fieldCurl(p, t, oct);
-  else if (variant == 2) f = fieldRidged(p, t, oct);
-  else f = fieldCells(p, t, oct);
+  if (variant == 0) f = fieldCosmic(p, t, oct, px);
+  else if (variant == 1) f = fieldCurl(p, t, oct, px);
+  else if (variant == 2) f = fieldRidged(p, t, oct, px);
+  else f = fieldCells(p, t, oct, px);
 
-  // Large-scale coherent structure lift
-  float macro = fbm(p * 0.25 + vec2(t*0.05, -t*0.03), 3);
+  // Large-scale coherent structure — always band-safe (very low freq)
+  float macro = fbm(p * 0.25 + vec2(t*0.05, -t*0.03), 3, px * 0.25);
   f = mix(f, 0.5 + 0.5*(f - 0.5) + (macro - 0.5)*0.6, uStructure);
 
   float shade = smoothstep(0.15, 0.95, f);
@@ -135,8 +151,11 @@ void main(){
   float d = length(uv - 0.5);
   col *= mix(1.0, smoothstep(0.9, 0.15, d), uVignette);
 
-  float g = hash(gl_FragCoord.xy + uTime * 60.0) - 0.5;
-  col += g * uGrain;
+  // Subtle luminance-only grain (triangular PDF), never chromatic dominance.
+  float g1 = hash(gl_FragCoord.xy + uTime * 60.0);
+  float g2 = hash(gl_FragCoord.xy + uTime * 73.0 + 17.3);
+  float g = (g1 + g2 - 1.0); // triangular ~[-1,1]
+  col += g * uGrain * 0.35 * (0.4 + 0.6 * shade);
 
   outColor = vec4(pow(max(col, 0.0), vec3(1.0 / 2.2)), 1.0);
 }
