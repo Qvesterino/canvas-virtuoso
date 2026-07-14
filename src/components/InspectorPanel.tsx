@@ -19,6 +19,9 @@ export function InspectorPanel() {
   const availableSystems = SYSTEM_ORDER.filter((s) => artwork.systems[s]);
   const specs = family.schema[inspected] ?? [];
   const system = artwork.systems[inspected];
+  const systemLocked = artwork.locks.some((l) => l.path === `system:${inspected}`);
+  const isPathLocked = (path: string) =>
+    artwork.locks.some((l) => l.path === path) || systemLocked;
 
   return (
     <div
@@ -67,21 +70,37 @@ export function InspectorPanel() {
                       seed {system.seed}
                     </div>
                   </div>
-                  <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={!system.bypassed}
-                      onChange={(e) =>
-                        dispatch({
-                          type: "setSystemBypassed",
-                          system: inspected,
-                          bypassed: !e.target.checked,
-                        })
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() =>
+                        dispatch({ type: "toggleLock", target: `system:${inspected}` })
                       }
-                      className="accent-primary"
-                    />
-                    active
-                  </label>
+                      className={[
+                        "rounded px-1.5 py-0.5 text-[10px] text-mono uppercase tracking-wider",
+                        systemLocked
+                          ? "bg-signal/20 text-signal"
+                          : "text-muted-foreground hover:text-foreground",
+                      ].join(" ")}
+                      title={systemLocked ? "Unlock system" : "Lock system"}
+                    >
+                      {systemLocked ? "locked" : "lock"}
+                    </button>
+                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={!system.bypassed}
+                        onChange={(e) =>
+                          dispatch({
+                            type: "setSystemBypassed",
+                            system: inspected,
+                            bypassed: !e.target.checked,
+                          })
+                        }
+                        className="accent-primary"
+                      />
+                      active
+                    </label>
+                  </div>
                 </div>
               )}
 
@@ -95,11 +114,27 @@ export function InspectorPanel() {
                 {specs.map((spec) => {
                   const value =
                     system?.parameters[spec.path] ?? (spec.default as ParamValue);
+                  const locked = isPathLocked(spec.path);
                   if (spec.kind === "scalar" && typeof value === "number") {
                     return (
                       <div key={spec.path}>
-                        <div className="mb-1 flex items-baseline justify-between">
-                          <label className="text-xs font-medium">{spec.label}</label>
+                        <div className="mb-1 flex items-baseline justify-between gap-2">
+                          <label className="flex items-center gap-1.5 text-xs font-medium">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                dispatch({ type: "toggleLock", target: spec.path })
+                              }
+                              className={[
+                                "text-[10px] leading-none",
+                                locked ? "text-signal" : "text-muted-foreground/50 hover:text-foreground",
+                              ].join(" ")}
+                              title={locked ? "Unlock parameter" : "Lock parameter"}
+                            >
+                              {locked ? "●" : "○"}
+                            </button>
+                            {spec.label}
+                          </label>
                           <span className="text-mono text-[10px] text-muted-foreground">
                             {value.toFixed(spec.step && spec.step < 0.1 ? 3 : 2)}
                           </span>
@@ -110,6 +145,7 @@ export function InspectorPanel() {
                           max={spec.max}
                           step={spec.step}
                           value={value}
+                          disabled={locked}
                           onChange={(e) =>
                             dispatch({
                               type: "setParameter",
@@ -118,7 +154,7 @@ export function InspectorPanel() {
                               value: Number(e.target.value),
                             })
                           }
-                          className="w-full accent-primary"
+                          className="w-full accent-primary disabled:opacity-40"
                         />
                         {spec.hint && mode === "expert" && (
                           <div className="mt-1 text-[10px] text-muted-foreground">

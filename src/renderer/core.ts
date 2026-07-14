@@ -1,11 +1,7 @@
 import { buildProgram, createFullscreenQuad, createGL } from "./gl";
-import {
-  LIVING_FIELDS_FS,
-  LIVING_FIELDS_VS,
-  projectLivingFields,
-  type LivingFieldsUniforms,
-} from "./pipelines/living-fields";
-import type { Artwork } from "../domain/artwork/types";
+import { getPipeline, type Pipeline } from "./pipelines";
+import type { UniformValue } from "./pipelines/types";
+import type { Artwork, FamilyId } from "../domain/artwork/types";
 import { TimeSource } from "../services/time";
 
 export type RendererStatus =
@@ -34,6 +30,8 @@ export class Renderer {
   private frameCount = 0;
   private fpsWindowStart = 0;
   private ro: ResizeObserver | null = null;
+  private activeFamily: FamilyId | null = null;
+  private pipeline: Pipeline | null = null;
 
   constructor(canvas: HTMLCanvasElement, hooks: RendererHooks) {
     this.canvas = canvas;
@@ -58,35 +56,45 @@ export class Renderer {
     this.canvas.addEventListener("webglcontextlost", this.onContextLost, false);
     this.canvas.addEventListener("webglcontextrestored", this.onContextRestored, false);
 
-    const build = buildProgram(gl, LIVING_FIELDS_VS, LIVING_FIELDS_FS);
-    if ("error" in build) {
-      this.setStatus({ kind: "degraded", reason: `Shader compile failed: ${build.error}` });
-      return false;
-    }
-    this.program = build.program;
     this.quad = createFullscreenQuad(gl);
-    this.cacheUniforms();
+    const artwork = this.hooks.getArtwork();
+    if (!this.usePipeline(artwork.family)) return false;
     this.time.reset();
 
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(this.canvas);
     this.resize();
-    this.setStatus({ kind: "running", family: "living-fields", fps: 0 });
+    this.setStatus({ kind: "running", family: this.activeFamily ?? "living-fields", fps: 0 });
     this.raf = requestAnimationFrame(this.loop);
     return true;
   }
 
   private cacheUniforms() {
-    if (!this.gl || !this.program) return;
+    if (!this.gl || !this.program || !this.pipeline) return;
     const gl = this.gl;
-    const names = [
-      "uResolution", "uTime", "uDensity", "uDetail", "uWarp",
-      "uSpeed", "uTurbulence", "uDrift",
-      "uHue", "uSpread", "uContrast", "uLuminosity",
-      "uBloom", "uGrain", "uVignette", "uSeed",
-    ];
     this.uniforms.clear();
-    for (const n of names) this.uniforms.set(n, gl.getUniformLocation(this.program, n));
+    const base = ["uResolution", "uTime", "uSeed"];
+    for (const n of base) this.uniforms.set(n, gl.getUniformLocation(this.program, n));
+    for (const n of this.pipeline.uniforms) {
+      this.uniforms.set(n, gl.getUniformLocation(this.program, n));
+    }
+  }
+
+  private usePipeline(family: FamilyId): boolean {
+    if (!this.gl) return false;
+    const pipeline = getPipeline(family);
+    if (!pipeline) return false;
+    const build = buildProgram(this.gl, pipeline.vs, pipeline.fs);
+    if ("error" in build) {
+      this.setStatus({ kind: "degraded", reason: `Shader compile failed: ${build.error}` });
+      return false;
+    }
+    if (this.program) this.gl.deleteProgram(this.program);
+    this.program = build.program;
+    this.pipeline = pipeline;
+    this.activeFamily = family;
+    this.cacheUniforms();
+    return true;
   }
 
   private onContextLost = (e: Event) => {
@@ -97,15 +105,10 @@ export class Renderer {
 
   private onContextRestored = () => {
     if (!this.gl) return;
-    const build = buildProgram(this.gl, LIVING_FIELDS_VS, LIVING_FIELDS_FS);
-    if ("error" in build) {
-      this.setStatus({ kind: "degraded", reason: `Recovery failed: ${build.error}` });
-      return;
-    }
-    this.program = build.program;
     this.quad = createFullscreenQuad(this.gl);
-    this.cacheUniforms();
-    this.setStatus({ kind: "running", family: "living-fields", fps: 0 });
+    const family = this.hooks.getArtwork().family;
+    if (!this.usePipeline(family)) return;
+    this.setStatus({ kind: "running", family, fps: 0 });
     this.raf = requestAnimationFrame(this.loop);
   };
 
@@ -122,32 +125,14 @@ export class Renderer {
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  private applyUniforms(u: LivingFieldsUniforms, t: number) {
+  private setUniform(name: string, value: UniformValue) {
     const gl = this.gl!;
-    const set1f = (name: string, v: number) => {
-      const loc = this.uniforms.get(name);
-      if (loc) gl.uniform1f(loc, v);
-    };
-    const set2f = (name: string, a: number, b: number) => {
-      const loc = this.uniforms.get(name);
-      if (loc) gl.uniform2f(loc, a, b);
-    };
-    set2f("uResolution", this.canvas.width, this.canvas.height);
-    set1f("uTime", t);
-    set1f("uDensity", u.density);
-    set1f("uDetail", u.detail);
-    set1f("uWarp", u.warp);
-    set1f("uSpeed", u.speed);
-    set1f("uTurbulence", u.turbulence);
-    set1f("uDrift", u.drift);
-    set1f("uHue", u.hue);
-    set1f("uSpread", u.spread);
-    set1f("uContrast", u.contrast);
-    set1f("uLuminosity", u.luminosity);
-    set1f("uBloom", u.bloom);
-    set1f("uGrain", u.grain);
-    set1f("uVignette", u.vignette);
-    set1f("uSeed", u.seed);
+    const loc = this.uniforms.get(name);
+    if (!loc) return;
+    if (typeof value === "number") gl.uniform1f(loc, value);
+    else if (value.length === 2) gl.uniform2f(loc, value[0], value[1]);
+    else if (value.length === 3) gl.uniform3f(loc, value[0], value[1], value[2]);
+    else gl.uniform4f(loc, value[0], value[1], value[2], value[3]);
   }
 
   private loop = (now: number) => {
@@ -157,10 +142,19 @@ export class Renderer {
 
     try {
       const artwork = this.hooks.getArtwork();
-      const u = projectLivingFields(artwork);
+      if (artwork.family !== this.activeFamily) {
+        if (!this.usePipeline(artwork.family)) return;
+      }
       const gl = this.gl;
       gl.useProgram(this.program);
-      this.applyUniforms(u, t);
+      this.setUniform("uResolution", [this.canvas.width, this.canvas.height]);
+      this.setUniform("uTime", t);
+      this.setUniform("uSeed", artwork.artworkSeed);
+      const values = this.pipeline!.project(artwork);
+      for (const name of this.pipeline!.uniforms) {
+        const v = values[name];
+        if (v !== undefined) this.setUniform(name, v);
+      }
       gl.bindVertexArray(this.quad.vao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.bindVertexArray(null);
@@ -181,7 +175,7 @@ export class Renderer {
       this.frameCount = 0;
       this.fpsWindowStart = now;
       if (this.status.kind === "running") {
-        this.setStatus({ kind: "running", family: this.status.family, fps });
+        this.setStatus({ kind: "running", family: this.activeFamily ?? this.status.family, fps });
       }
     }
 
