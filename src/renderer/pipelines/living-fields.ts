@@ -42,7 +42,7 @@ float vnoise(vec2 p){
 }
 // Band-limited fbm: attenuates octaves finer than the pixel footprint to kill
 // aliasing and moiré. pxFreq is the screen-space frequency of one texel in
-// the domain of `p`.
+// the domain of p.
 float fbm(vec2 p, int oct, float pxFreq){
   float v = 0.0, amp = 0.5, freq = 1.0, norm = 0.0;
   mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
@@ -125,7 +125,7 @@ void main(){
   // Effective octaves scaled by band-limit so extra octaves cost nothing
   // when they'd alias.
   int oct = int(clamp(uDetail, 1.0, 6.0));
-  // Screen-space frequency of one pixel in `p` domain (average |d p / d frag|).
+  // Screen-space frequency of one pixel in p domain (avg d p / d frag).
   float px = max(length(fwidth(p)), 1e-4);
   int variant = int(clamp(uVariant, 0.0, 3.0));
 
