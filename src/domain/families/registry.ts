@@ -13,6 +13,14 @@ export interface FamilyDefinition {
   requiredSystems: SystemId[];
   schema: Partial<Record<SystemId, ParamSpec[]>>;
   implemented: boolean;
+  /** Dot-path of the scalar that selects an implementation variant
+   *  (e.g. "form.variant"). Consumed by the Art Controls panel to
+   *  hide parameters that are inert for the current variant. */
+  variantParam?: string;
+  /** Human labels for each integer value of `variantParam`. Index
+   *  matches the scalar value. Used by Art Controls and the mutation
+   *  changelog so variant flips read as words, not numbers. */
+  variantNames?: string[];
 }
 
 export const FAMILY_REGISTRY: Record<FamilyId, FamilyDefinition> = {

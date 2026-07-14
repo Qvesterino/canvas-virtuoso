@@ -10,14 +10,54 @@ import type {
   Recipe,
   Snapshot,
   ModulationRoute,
+  LockEntry,
 } from "./types";
 import { createProject, createArtwork, newSnapshotId } from "./factories";
 import { mutateArtwork as engineMutate, randomizeArtwork as engineRandomize, remixArtworks } from "../mutation/engine";
-import { getFamily } from "../families/registry";
+import { getFamily, type FamilyDefinition } from "../families/registry";
 import { resolvePalette, type Palette } from "../palettes/library";
 import { findMacro } from "../macros/definitions";
 
 const MAX_HISTORY = 50;
+const MAX_CHANGELOG = 40;
+
+export type ChangeKind =
+  | "mutate"
+  | "randomize"
+  | "recipe"
+  | "remix"
+  | "reseed"
+  | "palette"
+  | "macro";
+
+export interface ChangelogParamDelta {
+  path: ParamPath;
+  label: string;
+  system: SystemId;
+  from: number;
+  to: number;
+  identity: boolean;
+  /** "variant" flips read as words in the UI; "scalar" is a value nudge. */
+  kind: "variant" | "scalar";
+  /** For variant flips: human labels of before/after. */
+  fromLabel?: string;
+  toLabel?: string;
+}
+
+export interface ChangelogEntry {
+  id: string;
+  at: number;
+  kind: ChangeKind;
+  /** Short header, e.g. "Mutate", "Applied Nebula". */
+  label: string;
+  /** One-line summary of the most notable change (variant flip, etc). */
+  headline?: string;
+  changes: ChangelogParamDelta[];
+  seedChanged: boolean;
+  reseededSystems: SystemId[];
+  identityCount: number;
+  totalChanges: number;
+}
 
 export interface AppState {
   project: Project;
@@ -33,6 +73,8 @@ export interface AppState {
   onboardingDismissed: boolean;
   diagnosticsOpen: boolean;
   activePaletteId: string | null;
+  changelog: ChangelogEntry[];
+  changelogOpen: boolean;
 }
 
 export type Command =
@@ -69,9 +111,155 @@ export type Command =
   | { type: "applyMacro"; macroId: string; value: number }
   | { type: "dismissOnboarding" }
   | { type: "revealOnboarding" }
-  | { type: "toggleDiagnostics" };
+  | { type: "toggleDiagnostics" }
+  | { type: "toggleChangelog" }
+  | { type: "setChangelogOpen"; open: boolean }
+  | { type: "clearChangelog" }
+  | { type: "clearIdentityLocks" };
 
 type Listener = () => void;
+
+/** Structural identity paths — recipes freeze these on apply so the
+ *  piece keeps its recognisable shape while other params stay editable. */
+const FALLBACK_IDENTITY_PATHS = new Set<string>([
+  "form.variant",
+  "form.kernel",
+  "form.mirrors",
+  "form.cells",
+  "form.rings",
+  "form.cluster",
+  "form.strokes",
+  "form.sources",
+  "form.layout",
+]);
+
+function familyIdentityPaths(family: FamilyDefinition): Set<string> {
+  const set = new Set<string>();
+  for (const specs of Object.values(family.schema)) {
+    if (!specs) continue;
+    for (const spec of specs) if (spec.identity) set.add(spec.path);
+  }
+  return set;
+}
+
+function specForPath(family: FamilyDefinition, path: ParamPath) {
+  for (const specs of Object.values(family.schema)) {
+    if (!specs) continue;
+    const hit = specs.find((s) => s.path === path);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+function variantLabel(family: FamilyDefinition, value: number): string | undefined {
+  const names = family.variantNames;
+  if (!names) return undefined;
+  const i = Math.round(value);
+  return names[i];
+}
+
+function diffArtworks(
+  prev: Artwork,
+  next: Artwork,
+  family: FamilyDefinition,
+): { changes: ChangelogParamDelta[]; reseededSystems: SystemId[] } {
+  const changes: ChangelogParamDelta[] = [];
+  const reseededSystems: SystemId[] = [];
+  const identityPaths = familyIdentityPaths(family);
+  for (const sysId of Object.keys(next.systems) as SystemId[]) {
+    const a = prev.systems[sysId];
+    const b = next.systems[sysId];
+    if (!b) continue;
+    if (a && a.seed !== b.seed) reseededSystems.push(sysId);
+    const specs = family.schema[sysId] ?? [];
+    for (const spec of specs) {
+      if (spec.kind !== "scalar") continue;
+      const av = a?.parameters[spec.path];
+      const bv = b.parameters[spec.path];
+      if (typeof bv !== "number") continue;
+      const before = typeof av === "number" ? av : (spec.default as number);
+      if (before === bv) continue;
+      const range = (spec.max ?? 1) - (spec.min ?? 0) || 1;
+      const isVariant =
+        (spec.step ?? 0) >= 1 && (identityPaths.has(spec.path) || FALLBACK_IDENTITY_PATHS.has(spec.path));
+      // Ignore invisibly-tiny scalar nudges (< 0.5% of range) unless variant.
+      if (!isVariant && Math.abs(bv - before) < range * 0.005) continue;
+      changes.push({
+        path: spec.path,
+        label: spec.label,
+        system: sysId,
+        from: before,
+        to: bv,
+        identity: !!spec.identity || FALLBACK_IDENTITY_PATHS.has(spec.path),
+        kind: isVariant ? "variant" : "scalar",
+        fromLabel:
+          isVariant && spec.path === family.variantParam
+            ? variantLabel(family, before)
+            : undefined,
+        toLabel:
+          isVariant && spec.path === family.variantParam
+            ? variantLabel(family, bv)
+            : undefined,
+      });
+    }
+  }
+  // Sort: identity first (variant flips lead), then largest deltas.
+  changes.sort((a, b) => {
+    if (a.identity !== b.identity) return a.identity ? -1 : 1;
+    if (a.kind !== b.kind) return a.kind === "variant" ? -1 : 1;
+    return Math.abs(b.to - b.from) - Math.abs(a.to - a.from);
+  });
+  return { changes, reseededSystems };
+}
+
+function makeHeadline(
+  family: FamilyDefinition,
+  entry: Pick<ChangelogEntry, "changes" | "reseededSystems" | "seedChanged">,
+): string | undefined {
+  const variantFlip = entry.changes.find(
+    (c) => c.kind === "variant" && c.path === family.variantParam,
+  );
+  if (variantFlip && variantFlip.fromLabel && variantFlip.toLabel) {
+    return `${variantFlip.fromLabel} → ${variantFlip.toLabel}`;
+  }
+  const otherVariant = entry.changes.find((c) => c.kind === "variant");
+  if (otherVariant) {
+    return `${otherVariant.label} ${Math.round(otherVariant.from)} → ${Math.round(otherVariant.to)}`;
+  }
+  const identity = entry.changes.find((c) => c.identity);
+  if (identity) return `${identity.label} shifted`;
+  if (entry.seedChanged || entry.reseededSystems.length > 0) {
+    return entry.reseededSystems.length > 0
+      ? `Re-seeded ${entry.reseededSystems.join(" · ")}`
+      : "Re-seeded";
+  }
+  return undefined;
+}
+
+function makeChangelogEntry(
+  kind: ChangeKind,
+  label: string,
+  prev: Artwork,
+  next: Artwork,
+  family: FamilyDefinition,
+): ChangelogEntry | null {
+  const { changes, reseededSystems } = diffArtworks(prev, next, family);
+  const seedChanged = prev.artworkSeed !== next.artworkSeed;
+  if (changes.length === 0 && !seedChanged && reseededSystems.length === 0) return null;
+  const entry: ChangelogEntry = {
+    id: `cl_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36)}`,
+    at: Date.now(),
+    kind,
+    label,
+    changes,
+    seedChanged,
+    reseededSystems,
+    identityCount: changes.filter((c) => c.identity).length,
+    totalChanges: changes.length,
+  };
+  entry.headline = makeHeadline(family, entry);
+  return entry;
+}
 
 function activeArtwork(project: Project): Artwork {
   return project.artworks[project.activeArtworkId];
@@ -108,6 +296,31 @@ function mutateArtwork(
 
 function isLocked(artwork: Artwork, target: string): boolean {
   return artwork.locks.some((l) => l.path === target);
+}
+
+function pushChangelog(state: AppState, entry: ChangelogEntry | null): AppState {
+  if (!entry) return state;
+  return {
+    ...state,
+    changelog: [entry, ...state.changelog].slice(0, MAX_CHANGELOG),
+  };
+}
+
+/** Run `updater`, and if the active artwork changed, record a changelog
+ *  entry describing the delta. */
+function withChangelog(
+  state: AppState,
+  kind: ChangeKind,
+  label: string,
+  updater: (s: AppState) => AppState,
+): AppState {
+  const prev = activeArtwork(state.project);
+  const next = updater(state);
+  if (next === state) return state;
+  const nextArt = activeArtwork(next.project);
+  if (nextArt.id !== prev.id) return next; // artwork switch — no diff
+  const family = getFamily(nextArt.family);
+  return pushChangelog(next, makeChangelogEntry(kind, label, prev, nextArt, family));
 }
 
 function apply(state: AppState, cmd: Command): AppState {
@@ -164,10 +377,12 @@ function apply(state: AppState, cmd: Command): AppState {
       );
     }
     case "reseedArtwork": {
-      return mutateArtwork(state, (a) => ({
-        ...a,
-        artworkSeed: Math.floor(Math.random() * 2 ** 31),
-      }));
+      return withChangelog(state, "reseed", "Reseed", (s) =>
+        mutateArtwork(s, (a) => ({
+          ...a,
+          artworkSeed: Math.floor(Math.random() * 2 ** 31),
+        })),
+      );
     }
     case "toggleLock": {
       return mutateArtwork(state, (a) => {
@@ -185,33 +400,65 @@ function apply(state: AppState, cmd: Command): AppState {
       });
     }
     case "applyRecipe": {
-      if (cmd.recipe.family !== state.project.artworks[state.project.activeArtworkId].family) {
+      const activeFam = state.project.artworks[state.project.activeArtworkId].family;
+      if (cmd.recipe.family !== activeFam) {
         return state;
       }
-      return mutateArtwork(state, (a) => {
-        const systems = { ...a.systems };
-        for (const change of cmd.recipe.changes) {
-          if (isLocked(a, change.path) || isLocked(a, `system:${change.system}`)) continue;
-          const sys = systems[change.system];
-          if (!sys) continue;
-          systems[change.system] = {
-            ...sys,
-            parameters: { ...sys.parameters, [change.path]: change.value },
+      const family = getFamily(activeFam);
+      const familyIds = familyIdentityPaths(family);
+      const touched = cmd.recipe.changes.map((c) => c.path);
+      const explicitIdentity = cmd.recipe.identityPaths;
+      // Identity paths for this recipe = explicit list OR derived from
+      // the intersection of recipe.changes with structural identity paths.
+      const identityForRecipe = new Set<string>(
+        explicitIdentity ??
+          touched.filter((p) => familyIds.has(p) || FALLBACK_IDENTITY_PATHS.has(p)),
+      );
+      return withChangelog(state, "recipe", `Applied ${cmd.recipe.name}`, (s) =>
+        mutateArtwork(s, (a) => {
+          const systems = { ...a.systems };
+          for (const change of cmd.recipe.changes) {
+            if (isLocked(a, change.path) || isLocked(a, `system:${change.system}`)) continue;
+            const sys = systems[change.system];
+            if (!sys) continue;
+            systems[change.system] = {
+              ...sys,
+              parameters: { ...sys.parameters, [change.path]: change.value },
+            };
+          }
+          // Rewrite identity locks: drop any prior recipe-identity locks,
+          // add fresh ones for the paths this recipe considers its identity.
+          const nonIdentity = a.locks.filter((l) => l.reason !== "identity");
+          const identityLocks: LockEntry[] = Array.from(identityForRecipe).map((path) => ({
+            path,
+            reason: "identity",
+            scope: { mutation: true, randomization: true, remix: true, recipe: false },
+          }));
+          return {
+            ...a,
+            systems,
+            locks: [...nonIdentity, ...identityLocks],
+            lineage: { ...a.lineage, recipeId: cmd.recipe.id },
           };
-        }
-        return { ...a, systems, lineage: { ...a.lineage, recipeId: cmd.recipe.id } };
-      });
+        }),
+      );
     }
     case "mutateArtwork": {
-      return mutateArtwork(state, (a) => engineMutate(a, cmd.strength ?? 0.5));
+      return withChangelog(state, "mutate", "Mutate", (s) =>
+        mutateArtwork(s, (a) => engineMutate(a, cmd.strength ?? 0.5)),
+      );
     }
     case "randomizeArtwork": {
-      return mutateArtwork(state, (a) => engineRandomize(a));
+      return withChangelog(state, "randomize", "Randomise", (s) =>
+        mutateArtwork(s, (a) => engineRandomize(a)),
+      );
     }
     case "remixWithSnapshot": {
       const snap = state.project.snapshots.find((s) => s.id === cmd.snapshotId);
       if (!snap) return state;
-      return mutateArtwork(state, (a) => remixArtworks(a, snap.artwork, cmd.blend ?? 0.5));
+      return withChangelog(state, "remix", `Remix ${snap.name}`, (s) =>
+        mutateArtwork(s, (a) => remixArtworks(a, snap.artwork, cmd.blend ?? 0.5)),
+      );
     }
     case "addModulationRoute": {
       return mutateArtwork(state, (a) => {
@@ -364,30 +611,60 @@ function apply(state: AppState, cmd: Command): AppState {
     case "toggleDiagnostics": {
       return { ...state, diagnosticsOpen: !state.diagnosticsOpen };
     }
+    case "toggleChangelog": {
+      return { ...state, changelogOpen: !state.changelogOpen };
+    }
+    case "setChangelogOpen": {
+      return state.changelogOpen === cmd.open ? state : { ...state, changelogOpen: cmd.open };
+    }
+    case "clearChangelog": {
+      return state.changelog.length === 0 ? state : { ...state, changelog: [] };
+    }
+    case "clearIdentityLocks": {
+      const a = activeArtwork(state.project);
+      if (!a.locks.some((l) => l.reason === "identity")) return state;
+      const next: Artwork = {
+        ...a,
+        locks: a.locks.filter((l) => l.reason !== "identity"),
+        revision: a.revision + 1,
+        updatedAt: Date.now(),
+      };
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          updatedAt: next.updatedAt,
+          artworks: { ...state.project.artworks, [next.id]: next },
+        },
+      };
+    }
     case "applyPalette": {
       const family = getFamily(state.project.artworks[state.project.activeArtworkId].family);
       const changes = resolvePalette(cmd.palette, family.schema);
       if (changes.length === 0) return { ...state, activePaletteId: cmd.palette.id };
-      const next = mutateArtwork(state, (a) => {
-        const systems = { ...a.systems };
-        for (const change of changes) {
-          if (isLocked(a, change.path) || isLocked(a, `system:${change.system}`)) continue;
-          const sys = systems[change.system];
-          if (!sys) continue;
-          systems[change.system] = {
-            ...sys,
-            parameters: { ...sys.parameters, [change.path]: change.value },
-          };
-        }
-        return { ...a, systems };
-      });
+      const next = withChangelog(state, "palette", `Palette · ${cmd.palette.name}`, (s) =>
+        mutateArtwork(s, (a) => {
+          const systems = { ...a.systems };
+          for (const change of changes) {
+            if (isLocked(a, change.path) || isLocked(a, `system:${change.system}`)) continue;
+            const sys = systems[change.system];
+            if (!sys) continue;
+            systems[change.system] = {
+              ...sys,
+              parameters: { ...sys.parameters, [change.path]: change.value },
+            };
+          }
+          return { ...a, systems };
+        }),
+      );
       return { ...next, activePaletteId: cmd.palette.id };
     }
     case "applyMacro": {
       const macro = findMacro(cmd.macroId);
       if (!macro) return state;
       const v = Math.max(0, Math.min(1, cmd.value));
-      return mutateArtwork(state, (a) => {
+      return withChangelog(state, "macro", `Macro · ${macro.label}`, (s) =>
+        mutateArtwork(s, (a) => {
         if (a.family !== macro.family) return a;
         const systems = { ...a.systems };
         for (const eff of macro.effects) {
@@ -401,7 +678,8 @@ function apply(state: AppState, cmd: Command): AppState {
           };
         }
         return { ...a, systems };
-      });
+      }),
+      );
     }
     case "switchFamily":
     case "newArtwork": {
@@ -438,6 +716,8 @@ let state: AppState = {
   onboardingDismissed: true, // SSR-safe default; client re-reads in effect
   diagnosticsOpen: false,
   activePaletteId: null,
+  changelog: [],
+  changelogOpen: false,
 };
 
 const listeners = new Set<Listener>();

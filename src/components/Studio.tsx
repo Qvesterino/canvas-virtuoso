@@ -3,6 +3,8 @@ import { CanvasHost } from "./CanvasHost";
 import { TopBar } from "./TopBar";
 import { BottomDock } from "./BottomDock";
 import { InspectorPanel } from "./InspectorPanel";
+import { ArtControlsPanel } from "./ArtControlsPanel";
+import { ChangelogPanel } from "./ChangelogPanel";
 import { LibraryPanel } from "./LibraryPanel";
 import { ExportPanel } from "./ExportPanel";
 import { MacroPanel } from "./MacroPanel";
@@ -56,6 +58,8 @@ export function Studio() {
       {hydrated && <DiscoverPanel />}
       {hydrated && <LibraryPanel />}
       <InspectorPanel />
+      {hydrated && <ArtControlsPanel />}
+      {hydrated && <ChangelogPanel />}
       <BottomDock />
       {hydrated && <ExportPanel />}
       {hydrated && <DiagnosticsHud />}

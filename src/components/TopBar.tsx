@@ -14,6 +14,8 @@ export function TopBar() {
   const canUndo = useAppState((s) => s.history.past.length > 0);
   const canRedo = useAppState((s) => s.history.future.length > 0);
   const memoryFrozen = useAppState((s) => s.memoryFrozen);
+  const changelogOpen = useAppState((s) => s.changelogOpen);
+  const changelogCount = useAppState((s) => s.changelog.length);
   const family = getFamily(artwork.family);
   const hasMemory = !!artwork.systems.memory;
 
@@ -81,6 +83,21 @@ export function TopBar() {
           title="Deterministic export"
         >
           Export
+        </button>
+        <button
+          onClick={() => dispatch({ type: "toggleChangelog" })}
+          className={[
+            "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-mono text-[10px] uppercase tracking-wider hover:bg-white/5",
+            changelogOpen ? "text-primary" : "text-foreground",
+          ].join(" ")}
+          title="Show mutation changelog — what changed, and why"
+        >
+          Changelog
+          {changelogCount > 0 && (
+            <span className="rounded bg-primary/15 px-1 text-[9px] text-primary">
+              {changelogCount}
+            </span>
+          )}
         </button>
         <span className="h-4 w-px bg-panel-border" />
         {MODES.map((m) => (

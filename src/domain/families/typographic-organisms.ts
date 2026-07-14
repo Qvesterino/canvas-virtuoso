@@ -2,7 +2,7 @@ import type { FamilyDefinition } from "./registry";
 import type { ParamSpec, SystemId } from "../artwork/types";
 
 const form: ParamSpec[] = [
-  { path: "form.variant", label: "Layout", kind: "scalar", min: 0, max: 3, step: 1, default: 0, hint: "0 Glyph grid · 1 Signal rain · 2 Ribbon marquee · 3 Word cloud." },
+  { path: "form.variant", label: "Layout", kind: "scalar", min: 0, max: 3, step: 1, default: 0, identity: true, hint: "0 Glyph grid · 1 Signal rain · 2 Ribbon marquee · 3 Word cloud." },
   { path: "form.cellSize", label: "Cell Size", kind: "scalar", min: 12, max: 80, step: 1, default: 32, hint: "How large each glyph is." },
   { path: "form.weight", label: "Weight", kind: "scalar", min: 0.1, max: 1, step: 0.01, default: 0.55 },
   { path: "form.jitter", label: "Jitter", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.3 },
@@ -40,4 +40,6 @@ export const typographicOrganismsFamily: FamilyDefinition = {
   requiredSystems: ["form", "output"],
   schema,
   implemented: true,
+  variantParam: "form.variant",
+  variantNames: ["Glyph grid", "Signal rain", "Ribbon marquee", "Word cloud"],
 };
