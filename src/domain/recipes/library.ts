@@ -947,6 +947,7 @@ export const RECIPES: Recipe[] = [
       { system: "form", path: "form.projection", value: 0.9 },
       { system: "form", path: "form.repeat", value: 1.4 },
       { system: "form", path: "form.twist", value: 0.6 },
+      { system: "form", path: "form.tempo", value: 0.35 },
       { system: "motion", path: "motion.speed", value: 0.25 },
       { system: "atmosphere", path: "atmosphere.fog", value: 0.55 },
       { system: "color", path: "color.hue", value: 0.62 },
@@ -1016,6 +1017,7 @@ export const RECIPES: Recipe[] = [
       { system: "form", path: "form.projection", value: 1.1 },
       { system: "form", path: "form.repeat", value: 1.8 },
       { system: "form", path: "form.twist", value: -0.4 },
+      { system: "form", path: "form.tempo", value: 0.15 },
       { system: "motion", path: "motion.speed", value: 0.5 },
       { system: "atmosphere", path: "atmosphere.fog", value: 0.35 },
       { system: "color", path: "color.hue", value: 0.84 },
@@ -1156,6 +1158,76 @@ export const RECIPES: Recipe[] = [
       { system: "material", path: "material.clearcoat", value: 0.6 },
       { system: "color", path: "color.hue", value: 0.14 },
       { system: "color", path: "color.saturation", value: 0.7 },
+    ],
+  },
+  // ─── MATERIAL FORMS · ADVANCED KNOT TOPOLOGIES ───────────────────────
+  // Each recipe below selects a DIFFERENT knot SDF branch via form.cluster
+  // (6 = granny, 7 = (5,7) star, 8 = triple braid). The change is
+  // topological — the underlying distance field is a different construction,
+  // not the same torus knot with different shading.
+  {
+    id: "mf-granny-knot",
+    family: "material-forms",
+    name: "Granny Knot",
+    tagline: "Two trefoils fused into a lumpy self-tightening tangle.",
+    changes: [
+      // SDF: two mirrored (2,3) trefoils summed with a large smin — bumpy,
+      // asymmetric, deliberately NOT the clean 3-lobe silhouette.
+      { system: "form", path: "form.variant", value: 4 },
+      { system: "form", path: "form.cluster", value: 6 },
+      { system: "form", path: "form.size", value: 0.55 },
+      { system: "form", path: "form.twist", value: 1.1 },
+      { system: "form", path: "form.deform", value: 0.4 },
+      { system: "form", path: "form.smoothness", value: 0.28 },
+      { system: "material", path: "material.metalness", value: 0.75 },
+      { system: "material", path: "material.roughness", value: 0.35 },
+      { system: "material", path: "material.iridescence", value: 0.25 },
+      { system: "color", path: "color.hue", value: 0.06 },
+      { system: "color", path: "color.saturation", value: 0.65 },
+    ],
+  },
+  {
+    id: "mf-star-knot",
+    family: "material-forms",
+    name: "Star Knot (5,7)",
+    tagline: "Dense five-around-seven winding — a spiked rosette.",
+    changes: [
+      // SDF: single (p=5, q=7) parametric torus knot — high winding gives
+      // many tight self-crossings that read as a starburst, not a ring.
+      { system: "form", path: "form.variant", value: 4 },
+      { system: "form", path: "form.cluster", value: 7 },
+      { system: "form", path: "form.size", value: 0.6 },
+      { system: "form", path: "form.twist", value: 0.9 },
+      { system: "form", path: "form.deform", value: 0.18 },
+      { system: "form", path: "form.smoothness", value: 0.14 },
+      { system: "material", path: "material.metalness", value: 0.95 },
+      { system: "material", path: "material.roughness", value: 0.18 },
+      { system: "material", path: "material.iridescence", value: 0.6 },
+      { system: "material", path: "material.clearcoat", value: 0.8 },
+      { system: "color", path: "color.hue", value: 0.78 },
+      { system: "color", path: "color.saturation", value: 0.75 },
+    ],
+  },
+  {
+    id: "mf-triple-braid",
+    family: "material-forms",
+    name: "Triple Braid",
+    tagline: "Three helical strands woven around one axis.",
+    changes: [
+      // SDF: three (1,6) helices phase-offset by 120° combined with a small
+      // smin — reads as a rope/braid, structurally distinct from any knot.
+      { system: "form", path: "form.variant", value: 4 },
+      { system: "form", path: "form.cluster", value: 8 },
+      { system: "form", path: "form.size", value: 0.58 },
+      { system: "form", path: "form.twist", value: 1.4 },
+      { system: "form", path: "form.deform", value: 0.1 },
+      { system: "form", path: "form.smoothness", value: 0.1 },
+      { system: "material", path: "material.metalness", value: 0.55 },
+      { system: "material", path: "material.roughness", value: 0.28 },
+      { system: "material", path: "material.iridescence", value: 0.4 },
+      { system: "material", path: "material.clearcoat", value: 0.7 },
+      { system: "color", path: "color.hue", value: 0.42 },
+      { system: "color", path: "color.saturation", value: 0.6 },
     ],
   },
   // ─── TEMPORAL PAINTINGS · MATHEMATICAL RIBBONS ────────────────────────

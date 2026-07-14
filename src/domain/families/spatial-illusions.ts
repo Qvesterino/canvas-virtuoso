@@ -17,6 +17,7 @@ const form: ParamSpec[] = [
   // ── Hypercube grid (variant 5) ──────────────────────────────────────
   { path: "form.cells", label: "Cells", kind: "scalar", min: 1, max: 8, step: 1, default: 4, identity: true, variantOf: [5], hint: "Grid tessellation density." },
   { path: "form.projection", label: "Projection", kind: "scalar", min: 0, max: 1.5, step: 0.01, default: 0.7, variantOf: [5], hint: "4D→3D projection strength." },
+  { path: "form.tempo", label: "Tempo", kind: "scalar", min: 0, max: 2, step: 0.01, default: 1.0, variantOf: [5], hint: "Internal rotation clock — independent of camera speed. Lets Cube Cascade and Tesseract Grid beat at different rates." },
 ];
 
 const motion: ParamSpec[] = [

@@ -33,6 +33,7 @@ export function DiagnosticsHud() {
   const artwork = useActiveArtwork();
   const audio = useAppState((s) => s.audioEnabled);
   const frozen = useAppState((s) => s.memoryFrozen);
+  const recipeIssues = useAppState((s) => s.lastRecipeIssues);
 
   const fps = status.kind === "running" ? status.fps : 0;
   const dot =
@@ -55,6 +56,14 @@ export function DiagnosticsHud() {
         <span className="text-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           {status.kind === "running" ? `${fps} fps` : status.kind}
         </span>
+        {recipeIssues.length > 0 && (
+          <span
+            className="rounded bg-destructive/25 px-1 text-mono text-[9px] uppercase tracking-wider text-destructive"
+            title="Recipe normalisation warnings — open diagnostics"
+          >
+            ⚠ {recipeIssues.length}
+          </span>
+        )}
       </button>
       {open && (
         <div className="panel-surface mt-2 w-[260px] p-3 text-[10px] text-mono text-muted-foreground">
@@ -80,6 +89,41 @@ export function DiagnosticsHud() {
           <div className="my-2 h-px bg-panel-border" />
           <Row k="audio" v={audio ? "on" : "off"} />
           <Row k="memory" v={frozen ? "frozen" : "live"} />
+          {recipeIssues.length > 0 && (
+            <>
+              <div className="my-2 h-px bg-panel-border" />
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-eyebrow text-destructive">
+                  Recipe · normalisation
+                </span>
+                <span className="text-[9px]">{recipeIssues[0].recipeName}</span>
+              </div>
+              <ul className="space-y-1">
+                {recipeIssues.map((iss, i) => (
+                  <li
+                    key={`${iss.path}-${i}`}
+                    className="rounded border border-destructive/40 bg-destructive/10 p-1.5"
+                  >
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-foreground">{iss.path}</span>
+                      <span className="text-destructive">
+                        {iss.value.toFixed(2)} {iss.side === "below" ? "<" : ">"}{" "}
+                        {iss.side === "below"
+                          ? iss.limit.min
+                          : iss.limit.max}
+                      </span>
+                    </div>
+                    <div className="text-[9px] uppercase tracking-wider text-destructive/80">
+                      {iss.category} · range [{iss.limit.min}, {iss.limit.max}]
+                    </div>
+                    <div className="mt-0.5 text-[9px] leading-tight text-muted-foreground">
+                      {iss.reason}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </div>

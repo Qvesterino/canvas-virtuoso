@@ -28,6 +28,7 @@ uniform float uRotation;
 uniform float uKernel;
 uniform float uCells;
 uniform float uProjection;
+uniform float uTempo;
 
 vec3 palette(float t){
   vec3 a = vec3(0.5), b = vec3(0.5), c = vec3(1.0);
@@ -113,9 +114,10 @@ float sdBoxFrame(vec3 p, vec3 b, float e){
 float sceneHyper(vec3 p){
   float rep = max(1.6 / max(uCells, 1.0), 0.35) * max(uRepeat, 0.6);
   vec3 q = p;
-  // NOTE: rotate at uSpeed — previously hard-coded, which made "Cube Cascade"
-  // and "Tesseract Grid" spin so fast they were unusable even at speed=0.1.
-  float ts = uTime * max(uSpeed, 0.0);
+  // Separate tempo scaler so Cube Cascade vs Tesseract Grid can beat at
+  // their own rate independent of camera motion.speed. uSpeed drives the
+  // rig, uTempo scales the *internal* rotation clock only.
+  float ts = uTime * max(uSpeed, 0.0) * max(uTempo, 0.0);
   float ca = cos(ts*0.35), sa = sin(ts*0.35);
   q.xy = mat2(ca, -sa, sa, ca) * q.xy;
   float cb = cos(ts*0.25 + uTwist), sb = sin(ts*0.25 + uTwist);
@@ -294,7 +296,7 @@ export const spatialIllusionsPipeline: Pipeline = {
     "uBloom", "uFog",
     "uHue", "uContrast", "uVignette",
     "uMirrors", "uSymmetry", "uRipple", "uRotation", "uKernel",
-    "uCells", "uProjection",
+    "uCells", "uProjection", "uTempo",
   ],
   project(artwork) {
     return {
@@ -318,6 +320,7 @@ export const spatialIllusionsPipeline: Pipeline = {
       uKernel: paramNum(artwork, "form", "form.kernel", 1),
       uCells: paramNum(artwork, "form", "form.cells", 4),
       uProjection: paramNum(artwork, "form", "form.projection", 0.7),
+      uTempo: paramNum(artwork, "form", "form.tempo", 1.0),
     };
   },
 };
