@@ -14,6 +14,7 @@ const motion: ParamSpec[] = [
 const memory: ParamSpec[] = [
   { path: "memory.persistence", label: "Persistence", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.72, hint: "How long strokes linger." },
   { path: "memory.bleed", label: "Bleed", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.4 },
+  { path: "memory.feedback", label: "Feedback", kind: "scalar", min: 0, max: 1, step: 0.01, default: 1.0, hint: "Amount of the previous frame folded back in." },
 ];
 
 const color: ParamSpec[] = [

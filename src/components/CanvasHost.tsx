@@ -16,6 +16,8 @@ export function CanvasHost() {
         return s.project.artworks[s.project.activeArtworkId];
       },
       isPlaying: () => getState().playing,
+      isMemoryFrozen: () => getState().memoryFrozen,
+      getMemoryClearNonce: () => getState().memoryClearNonce,
     });
     renderer.init();
     return () => renderer.dispose();

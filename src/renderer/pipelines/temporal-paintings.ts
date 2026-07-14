@@ -18,6 +18,8 @@ uniform float uHue;
 uniform float uSpread;
 uniform float uContrast;
 uniform float uVignette;
+uniform sampler2D uPrev;
+uniform float uFeedback;
 
 float hash(vec2 p){
   p = fract(p * vec2(123.34, 456.21));
@@ -54,13 +56,12 @@ void main(){
 
   vec3 accum = vec3(0.0);
   float wsum = 0.0;
-  int n = int(clamp(uStrokes, 1.0, 6.0));
-  for (int i = 0; i < 6; i++){
+  int n = int(clamp(uStrokes, 1.0, 4.0));
+  for (int i = 0; i < 4; i++){
     if (i >= n) break;
     float fi = float(i);
-    // temporal memory: sample earlier "time-slices" with decreasing weight
-    float dt = fi * (0.4 + uPersistence * 1.8);
-    float w = pow(uPersistence, fi);
+    float dt = fi * 0.4;
+    float w = pow(0.75, fi);
     vec2 flow = vec2(
       fbm(p * (1.0 + uBleed) + vec2(0.0, t - dt)),
       fbm(p * (1.0 + uBleed) + vec2(5.2, -t + dt))
@@ -71,7 +72,17 @@ void main(){
     accum += col * w * smoothstep(0.1, 0.9, f);
     wsum += w;
   }
-  vec3 col = accum / max(wsum, 0.001);
+  vec3 fresh = accum / max(wsum, 0.001);
+
+  // Feedback: sample previous frame with a small drift so trails flow.
+  vec2 drift = (vec2(
+    fbm(p * 0.6 + vec2(0.0, t)),
+    fbm(p * 0.6 + vec2(7.3, -t))
+  ) - 0.5) * (0.004 + uBleed * 0.02);
+  vec3 prev = texture(uPrev, uv + drift).rgb;
+  float k = clamp(uPersistence, 0.0, 0.995) * uFeedback;
+  vec3 col = mix(fresh, max(prev - 0.004, vec3(0.0)) + fresh * (1.0 - k), k);
+
   col = pow(col, vec3(uContrast));
 
   float d = length(uv - 0.5);
@@ -84,10 +95,12 @@ export const temporalPaintingsPipeline: Pipeline = {
   id: "temporal-paintings",
   vs: BASE_VS,
   fs: FS,
+  feedback: true,
   uniforms: [
     "uBrush", "uStrokes", "uFlow", "uChaos",
     "uPersistence", "uBleed",
     "uHue", "uSpread", "uContrast", "uVignette",
+    "uFeedback",
   ],
   project(artwork) {
     return {
@@ -97,6 +110,7 @@ export const temporalPaintingsPipeline: Pipeline = {
       uChaos: paramNum(artwork, "motion", "motion.chaos", 0.35),
       uPersistence: paramNum(artwork, "memory", "memory.persistence", 0.72),
       uBleed: paramNum(artwork, "memory", "memory.bleed", 0.4),
+      uFeedback: paramNum(artwork, "memory", "memory.feedback", 1.0),
       uHue: paramNum(artwork, "color", "color.hue", 0.4),
       uSpread: paramNum(artwork, "color", "color.spread", 0.5),
       uContrast: paramNum(artwork, "color", "color.contrast", 1.1),

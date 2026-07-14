@@ -4,6 +4,7 @@ import { TopBar } from "./TopBar";
 import { BottomDock } from "./BottomDock";
 import { InspectorPanel } from "./InspectorPanel";
 import { LibraryPanel } from "./LibraryPanel";
+import { ExportPanel } from "./ExportPanel";
 import { dispatch, getState } from "../domain/artwork/store";
 import { bootstrapPersistence } from "../domain/persistence/autosave";
 
@@ -43,6 +44,7 @@ export function Studio() {
       {hydrated && <LibraryPanel />}
       <InspectorPanel />
       <BottomDock />
+      {hydrated && <ExportPanel />}
     </div>
   );
 }
