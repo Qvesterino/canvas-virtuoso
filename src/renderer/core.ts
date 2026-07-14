@@ -163,7 +163,9 @@ export class Renderer {
 
   resize() {
     if (!this.gl) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Full native density for crisp output; capped only for very high-DPI
+    // screens to keep frame cost bounded.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     const rect = this.canvas.getBoundingClientRect();
     const w = Math.max(1, Math.floor(rect.width * dpr));
     const h = Math.max(1, Math.floor(rect.height * dpr));
