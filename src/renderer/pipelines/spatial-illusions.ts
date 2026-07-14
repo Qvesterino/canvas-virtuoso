@@ -113,14 +113,15 @@ float sdBoxFrame(vec3 p, vec3 b, float e){
 float sceneHyper(vec3 p){
   float rep = max(1.6 / max(uCells, 1.0), 0.35) * max(uRepeat, 0.6);
   vec3 q = p;
-  q.xy *= mat2(cos(uTime*0.2), -sin(uTime*0.2), sin(uTime*0.2), cos(uTime*0.2));
-  q.xz *= mat2(cos(uTime*0.15+uTwist), -sin(uTime*0.15+uTwist), sin(uTime*0.15+uTwist), cos(uTime*0.15+uTwist));
+  float ca = cos(uTime*0.2), sa = sin(uTime*0.2);
+  q.xy = mat2(ca, -sa, sa, ca) * q.xy;
+  float cb = cos(uTime*0.15 + uTwist), sb = sin(uTime*0.15 + uTwist);
+  q.xz = mat2(cb, -sb, sb, cb) * q.xz;
   q = mod(q + rep*0.5, rep) - rep*0.5;
   float outer = sdBoxFrame(q, vec3(rep*0.42), 0.03);
-  // Inner projected cube (the 4D→3D shadow) — smaller and offset.
-  vec3 s = q;
-  s.xw_swiz;
-  float inner = sdBoxFrame(q * (1.0 + uProjection*0.9), vec3(rep*0.28), 0.025);
+  // Inner projected cube — the 4D→3D "shadow" that pulses in scale.
+  float pulse = 1.0 + uProjection * (0.4 + 0.35*sin(uTime*0.9));
+  float inner = sdBoxFrame(q * pulse, vec3(rep*0.24), 0.02) / pulse;
   return min(outer, inner);
 }
 
@@ -203,10 +204,11 @@ float sceneCathedral(vec3 p){
 }
 
 float sceneRM(vec3 p){
-  int v = int(clamp(uVariant, 0.0, 3.0));
+  int v = int(clamp(uVariant, 0.0, 5.0));
   if (v == 1) return sceneHall(p);
   if (v == 2) return sceneMenger(p);
-  return sceneCathedral(p);
+  if (v == 3) return sceneCathedral(p);
+  return sceneHyper(p);
 }
 vec3 normalRM(vec3 p){
   vec2 e = vec2(0.002, 0.0);
@@ -260,10 +262,11 @@ vec3 renderRaymarched(vec2 uv){
 
 void main(){
   vec2 uv = (vUv - 0.5) * vec2(uResolution.x/uResolution.y, 1.0);
-  int variant = int(clamp(uVariant, 0.0, 3.0));
+  int variant = int(clamp(uVariant, 0.0, 5.0));
   vec3 col;
-  if (variant == 0) col = tunnelRings(uv, uTime);
-  else col = renderRaymarched(uv);
+  if (variant == 0)      col = tunnelRings(uv, uTime);
+  else if (variant == 4) col = kaleidoscope(uv, uTime);
+  else                    col = renderRaymarched(uv);
 
   col = pow(col, vec3(uContrast));
   float d = length(vUv - 0.5);
@@ -281,6 +284,8 @@ export const spatialIllusionsPipeline: Pipeline = {
     "uSpeed", "uWarble",
     "uBloom", "uFog",
     "uHue", "uContrast", "uVignette",
+    "uMirrors", "uSymmetry", "uRipple", "uRotation", "uKernel",
+    "uCells", "uProjection",
   ],
   project(artwork) {
     return {
@@ -297,6 +302,13 @@ export const spatialIllusionsPipeline: Pipeline = {
       uHue: paramNum(artwork, "color", "color.hue", 0.68),
       uContrast: paramNum(artwork, "color", "color.contrast", 1.2),
       uVignette: paramNum(artwork, "output", "output.vignette", 0.45),
+      uMirrors: paramNum(artwork, "form", "form.mirrors", 6),
+      uSymmetry: paramNum(artwork, "form", "form.symmetry", 0.85),
+      uRipple: paramNum(artwork, "form", "form.ripple", 0.4),
+      uRotation: paramNum(artwork, "form", "form.rotation", 0.25),
+      uKernel: paramNum(artwork, "form", "form.kernel", 1),
+      uCells: paramNum(artwork, "form", "form.cells", 4),
+      uProjection: paramNum(artwork, "form", "form.projection", 0.7),
     };
   },
 };
