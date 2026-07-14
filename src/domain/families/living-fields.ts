@@ -25,7 +25,7 @@ const color: ParamSpec[] = [
 
 const light: ParamSpec[] = [
   { path: "light.bloom", label: "Bloom", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.55, hint: "Soft luminance halo." },
-  { path: "light.grain", label: "Grain", kind: "scalar", min: 0, max: 0.3, step: 0.005, default: 0.04, hint: "Cinematic sensor grain." },
+  { path: "light.grain", label: "Grain", kind: "scalar", min: 0, max: 0.15, step: 0.002, default: 0.015, hint: "Subtle sensor grain — never dominant." },
 ];
 
 const output: ParamSpec[] = [
