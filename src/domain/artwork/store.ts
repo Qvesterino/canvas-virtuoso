@@ -21,6 +21,17 @@ import { findMacro } from "../macros/definitions";
 const MAX_HISTORY = 50;
 const MAX_CHANGELOG = 40;
 
+/** Stable 32-bit hash of a recipe id — used when a Recipe has no explicit
+ *  seed so repeated clicks on the same recipe reproduce the same artwork. */
+function hashRecipeSeed(id: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return (h & 0x7fffffff) || 1;
+}
+
 export type ChangeKind =
   | "mutate"
   | "randomize"
@@ -401,24 +412,30 @@ function apply(state: AppState, cmd: Command): AppState {
     }
     case "applyRecipe": {
       const activeFam = state.project.artworks[state.project.activeArtworkId].family;
-      if (cmd.recipe.family !== activeFam) {
-        return state;
-      }
+      if (cmd.recipe.family !== activeFam) return state;
       const family = getFamily(activeFam);
       const familyIds = familyIdentityPaths(family);
       const touched = cmd.recipe.changes.map((c) => c.path);
       const explicitIdentity = cmd.recipe.identityPaths;
-      // Identity paths for this recipe = explicit list OR derived from
-      // the intersection of recipe.changes with structural identity paths.
       const identityForRecipe = new Set<string>(
         explicitIdentity ??
           touched.filter((p) => familyIds.has(p) || FALLBACK_IDENTITY_PATHS.has(p)),
       );
+      // A recipe is a DETERMINISTIC starting composition: clicking Abyss
+      // twice must produce the same artwork. We rebuild from family
+      // defaults with a stable per-recipe seed instead of patching the
+      // current artwork, so no leftover state from the previous recipe
+      // bleeds through.
+      const recipeSeed = cmd.recipe.seed ?? hashRecipeSeed(cmd.recipe.id);
       return withChangelog(state, "recipe", `Applied ${cmd.recipe.name}`, (s) =>
         mutateArtwork(s, (a) => {
-          const systems = { ...a.systems };
+          const fresh = createArtwork(a.family, a.name, {
+            id: a.id,
+            seed: recipeSeed,
+            createdAt: a.createdAt,
+          });
+          const systems = { ...fresh.systems };
           for (const change of cmd.recipe.changes) {
-            if (isLocked(a, change.path) || isLocked(a, `system:${change.system}`)) continue;
             const sys = systems[change.system];
             if (!sys) continue;
             systems[change.system] = {
@@ -426,19 +443,19 @@ function apply(state: AppState, cmd: Command): AppState {
               parameters: { ...sys.parameters, [change.path]: change.value },
             };
           }
-          // Rewrite identity locks: drop any prior recipe-identity locks,
-          // add fresh ones for the paths this recipe considers its identity.
-          const nonIdentity = a.locks.filter((l) => l.reason !== "identity");
           const identityLocks: LockEntry[] = Array.from(identityForRecipe).map((path) => ({
             path,
             reason: "identity",
             scope: { mutation: true, randomization: true, remix: true, recipe: false },
           }));
           return {
-            ...a,
+            ...fresh,
+            revision: a.revision,
             systems,
-            locks: [...nonIdentity, ...identityLocks],
-            lineage: { ...a.lineage, recipeId: cmd.recipe.id },
+            locks: identityLocks,
+            modulationRoutes: a.modulationRoutes,
+            output: a.output,
+            lineage: { ...fresh.lineage, createdFrom: "recipe", recipeId: cmd.recipe.id },
           };
         }),
       );

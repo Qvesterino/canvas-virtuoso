@@ -150,10 +150,14 @@ void main(){
   vec2 drift = (vec2(fbm(p*0.6 + vec2(0.0, t)),
                      fbm(p*0.6 + vec2(7.3, -t))) - 0.5) * (0.004 + uBleed*0.02);
   vec3 prev = texture(uPrev, uv + drift).rgb;
-  float k = clamp(uPersistence, 0.0, 0.995) * uFeedback;
-  // Additive-with-decay: guarantees visible marks even at high persistence.
-  vec3 decayed = max(prev - vec3(0.003 + (1.0-k)*0.03), vec3(0.0));
-  vec3 col = decayed + fresh * (0.4 + (1.0 - k) * 1.2);
+  float k = clamp(uPersistence, 0.0, 0.985) * uFeedback;
+  // Weighted blend: converges to fresh but slowly, so trails read as
+  // strokes accumulating instead of runaway addition (which saturated
+  // the whole canvas white after a few seconds at high persistence).
+  // A tiny floor decay stops static energy trapped in dead pixels.
+  vec3 col = mix(fresh, prev, k);
+  col = max(col - vec3(0.0015), 0.0);
+  col = min(col, vec3(1.5));
 
   col = pow(col, vec3(uContrast));
 

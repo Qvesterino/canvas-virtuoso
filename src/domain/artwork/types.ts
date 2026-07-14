@@ -159,4 +159,10 @@ export interface Recipe {
    *  when this recipe is applied. When omitted the store derives them
    *  from `ParamSpec.identity` on paths the recipe actually touches. */
   identityPaths?: ParamPath[];
+  /** Deterministic seed for this recipe. When omitted the store derives
+   *  one from the recipe id so clicking the same recipe twice always
+   *  produces the same starting artwork. Recipes are STARTING POINTS,
+   *  not randomisation — Mutate / Randomize / Remix are the entry
+   *  points for new variants. */
+  seed?: number;
 }
