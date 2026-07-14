@@ -4,7 +4,7 @@ import { TopBar } from "./TopBar";
 import { BottomDock } from "./BottomDock";
 import { InspectorPanel } from "./InspectorPanel";
 import { LibraryPanel } from "./LibraryPanel";
-import { dispatch } from "../domain/artwork/store";
+import { dispatch, getState } from "../domain/artwork/store";
 import { bootstrapPersistence } from "../domain/persistence/autosave";
 
 export function Studio() {
@@ -26,7 +26,6 @@ export function Studio() {
         dispatch({ type: "redo" });
       } else if (e.key === " " && !meta) {
         e.preventDefault();
-        const { getState } = require("../domain/artwork/store") as typeof import("../domain/artwork/store");
         dispatch({ type: "setPlaying", playing: !getState().playing });
       }
     };
