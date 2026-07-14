@@ -151,11 +151,10 @@ void main(){
                      fbm(p*0.6 + vec2(7.3, -t))) - 0.5) * (0.004 + uBleed*0.02);
   vec3 prev = texture(uPrev, uv + drift).rgb;
   float k = clamp(uPersistence, 0.0, 0.985) * uFeedback;
-  // Weighted blend: converges to `fresh` but slowly, so trails read as
-  // strokes accumulating over time instead of runaway addition (which
-  // saturated the whole canvas white after a few seconds at high
-  // persistence). A tiny floor decay stops static energy from getting
-  // trapped in dead pixels.
+  // Weighted blend: converges to fresh but slowly, so trails read as
+  // strokes accumulating instead of runaway addition (which saturated
+  // the whole canvas white after a few seconds at high persistence).
+  // A tiny floor decay stops static energy trapped in dead pixels.
   vec3 col = mix(fresh, prev, k);
   col = max(col - vec3(0.0015), 0.0);
   col = min(col, vec3(1.5));
