@@ -2,9 +2,12 @@ import type { FamilyDefinition } from "./registry";
 import type { ParamSpec, SystemId } from "../artwork/types";
 
 const form: ParamSpec[] = [
+  { path: "form.variant", label: "Architecture", kind: "scalar", min: 0, max: 3, step: 1, default: 0, hint: "0 Ring tunnel · 1 Hall of columns · 2 Menger fractal · 3 Cathedral vault." },
   { path: "form.depth", label: "Depth", kind: "scalar", min: 0.4, max: 3, step: 0.01, default: 1.2 },
   { path: "form.twist", label: "Twist", kind: "scalar", min: -1.5, max: 1.5, step: 0.01, default: 0.5 },
   { path: "form.rings", label: "Rings", kind: "scalar", min: 2, max: 24, step: 1, default: 10 },
+  { path: "form.repeat", label: "Repeat", kind: "scalar", min: 0.6, max: 4, step: 0.01, default: 1.6, hint: "Spacing of repeated architecture." },
+  { path: "form.cameraSway", label: "Camera Sway", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.35 },
 ];
 
 const motion: ParamSpec[] = [

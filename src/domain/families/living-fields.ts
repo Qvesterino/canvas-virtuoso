@@ -2,9 +2,12 @@ import type { FamilyDefinition } from "./registry";
 import type { ParamSpec, SystemId } from "../artwork/types";
 
 const form: ParamSpec[] = [
+  { path: "form.variant", label: "Topology", kind: "scalar", min: 0, max: 3, step: 1, default: 0, hint: "0 Cosmic clouds · 1 Curl advection · 2 Ridged veins · 3 Reaction cells." },
   { path: "form.density", label: "Density", kind: "scalar", min: 0.4, max: 6, step: 0.01, default: 2.2, hint: "How tightly the field is woven." },
   { path: "form.detail", label: "Detail", kind: "scalar", min: 1, max: 6, step: 1, default: 4, hint: "Octaves of internal structure." },
   { path: "form.warp", label: "Warp", kind: "scalar", min: 0, max: 2, step: 0.01, default: 0.85, hint: "How much the field folds into itself." },
+  { path: "form.scale", label: "Scale", kind: "scalar", min: 0.3, max: 3, step: 0.01, default: 1, hint: "Zoom of the underlying field." },
+  { path: "form.structure", label: "Structure", kind: "scalar", min: 0, max: 1, step: 0.01, default: 0.55, hint: "Large-scale coherence vs fine noise." },
 ];
 
 const motion: ParamSpec[] = [
