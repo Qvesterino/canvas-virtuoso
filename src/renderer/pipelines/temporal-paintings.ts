@@ -140,25 +140,25 @@ void main(){
 
   // pulse
   float pulse = 1.0 + uPulse * 0.6 * sin(uTime * 2.5);
-  fresh *= uIntensity * pulse;
+  // Deposit budget per frame — visibly builds trails without white-out.
+  fresh *= pulse * 0.14;
 
-  // subtle background wash so canvas never looks black on cold start
-  vec3 wash = palette(fbm(p*0.4 + t*0.05) * uSpread + uHue) * 0.06;
-  fresh += wash;
+  // Faint palette-tinted background so cold-start / empty regions read
+  // as canvas rather than dead black.
+  vec3 wash = palette(fbm(p*0.4 + t*0.05) * uSpread + uHue) * 0.025;
 
   // Feedback: sample previous frame with drift so trails flow.
   vec2 drift = (vec2(fbm(p*0.6 + vec2(0.0, t)),
                      fbm(p*0.6 + vec2(7.3, -t))) - 0.5) * (0.004 + uBleed*0.02);
   vec3 prev = texture(uPrev, uv + drift).rgb;
-  float k = clamp(uPersistence, 0.0, 0.985) * uFeedback;
-  // Weighted blend: converges to fresh but slowly, so trails read as
-  // strokes accumulating instead of runaway addition (which saturated
-  // the whole canvas white after a few seconds at high persistence).
-  // A tiny floor decay stops static energy trapped in dead pixels.
-  vec3 col = mix(fresh, prev, k);
-  col = max(col - vec3(0.0015), 0.0);
-  col = min(col, vec3(1.5));
 
+  // Additive-with-decay: strokes accumulate over time (visible trails)
+  // but a soft tonemap at the end guarantees no runaway to white.
+  float decay = mix(0.86, 0.995, clamp(uPersistence, 0.0, 1.0)) * clamp(uFeedback, 0.0, 1.0);
+  vec3 col = prev * decay + fresh * uIntensity + wash;
+
+  // Reinhard-ish soft rolloff — highlights compress, mids stay punchy.
+  col = col / (1.0 + col * 0.55);
   col = pow(col, vec3(uContrast));
 
   float d = length(uv - 0.5);

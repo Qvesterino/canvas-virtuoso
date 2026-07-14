@@ -70,11 +70,15 @@ vec3 palette(float t){
 // --- Variant renderers
 vec3 renderGrid(vec2 frag, vec2 res){
   float cell = max(uCellSize, 6.0);
-  vec2 cellPos = floor(frag / cell);
-  vec2 local = (fract(frag / cell) - 0.5) * 2.0;
+  // Whole grid marches sideways — makes the "choir" actually move.
+  float march = uTime * uSpeed * cell * 0.6;
+  vec2 gp = vec2(frag.x + march, frag.y);
+  vec2 cellPos = floor(gp / cell);
+  vec2 local = (fract(gp / cell) - 0.5) * 2.0;
 
   float k = hash(cellPos + floor(uSeed*0.01));
-  float breathe = 1.0 + uBreath * 0.25 * sin(uTime*uSpeed*2.0 + k*6.28);
+  // Stronger breath so pulsing is unmistakable.
+  float breathe = 1.0 + uBreath * 0.55 * sin(uTime*uSpeed*2.5 + k*6.28);
   local /= breathe;
   vec2 jit = (vec2(hash(cellPos+3.1), hash(cellPos+7.7)) - 0.5) * uJitter * 0.6;
   local += jit;
@@ -83,7 +87,9 @@ vec3 renderGrid(vec2 frag, vec2 res){
   // growth: modulate weight per cell over time
   float grow = mix(0.6, 1.0, 0.5 + 0.5*sin(uTime*uSpeed*0.6 + k*6.28)) * (0.5 + uGrowth*0.8);
 
-  float d = glyph(local, k + floor(uTime*uSpeed*0.5 + k*4.0)*0.11);
+  // Cycle glyphs ~2 per second at speed=1 so letters visibly shuffle.
+  float glyphTick = floor(uTime * (0.8 + uSpeed*1.6) + k*4.0) * 0.137;
+  float d = glyph(local, k + glyphTick);
   float mask = 1.0 - smoothstep(-uSoftness, uSoftness, d - (uWeight - 0.5)*0.3 * grow);
 
   // dissolve: subtract random speckle
