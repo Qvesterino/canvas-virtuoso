@@ -21,6 +21,13 @@ uniform float uFog;
 uniform float uHue;
 uniform float uContrast;
 uniform float uVignette;
+uniform float uMirrors;
+uniform float uSymmetry;
+uniform float uRipple;
+uniform float uRotation;
+uniform float uKernel;
+uniform float uCells;
+uniform float uProjection;
 
 vec3 palette(float t){
   vec3 a = vec3(0.5), b = vec3(0.5), c = vec3(1.0);
@@ -28,6 +35,94 @@ vec3 palette(float t){
   return a + b * cos(6.28318 * (c*t + d));
 }
 mat2 rot2(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
+
+float hash21(vec2 p){
+  p = fract(p * vec2(234.34, 435.345));
+  p += dot(p, p + 34.23);
+  return fract(p.x * p.y);
+}
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  float a = hash21(i), b = hash21(i+vec2(1,0));
+  float c = hash21(i+vec2(0,1)), d = hash21(i+vec2(1,1));
+  vec2 u = f*f*(3.0 - 2.0*f);
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+}
+
+// -------- Kaleidoscope (variant 4) — mirrors, symmetry, ripple, rotation, kernel
+vec3 kaleidoscope(vec2 uv, float t){
+  float rot = t * uRotation * 0.6 + uSeed * 0.0003;
+  vec2 p = rot2(rot) * uv;
+  float r = length(p);
+  // Radial ripple that warps the sampling radius.
+  r += sin(r * (6.0 + uRings*0.4) - t*1.4) * uRipple * 0.08;
+  float a = atan(p.y, p.x);
+  float n = max(uMirrors, 2.0);
+  float wedge = 6.28318 / n;
+  // Fold angle into a single mirrored wedge.
+  a = mod(a, wedge);
+  a = abs(a - wedge*0.5);
+  // Soft symmetry — high symmetry = crisp mirrors, low = smeared.
+  float soft = mix(0.35, 0.0, clamp(uSymmetry, 0.0, 1.0));
+  a += (vnoise(vec2(r*4.0, t*0.5)) - 0.5) * soft;
+  vec2 q = vec2(cos(a), sin(a)) * r;
+
+  int k = int(clamp(uKernel, 0.0, 3.0));
+  float pattern;
+  if (k == 0){
+    // Stripes radiating outward.
+    pattern = 0.5 + 0.5 * sin(q.x * (8.0 + uRings*0.6) + t*0.8);
+  } else if (k == 1){
+    // Petals — rings modulated by angle.
+    float rings = 0.5 + 0.5 * sin(r*(10.0 + uRings*0.3) - t*1.2);
+    float petals = 0.5 + 0.5 * cos(a * n * 2.0 + t*0.7);
+    pattern = mix(rings, petals, 0.5);
+  } else if (k == 2){
+    // Crystal shards — hard voronoi-ish cells.
+    vec2 g = floor(q * (3.0 + uRings*0.3));
+    vec2 f = fract(q * (3.0 + uRings*0.3)) - 0.5;
+    float d = length(f);
+    pattern = smoothstep(0.5, 0.0, d) + hash21(g) * 0.4;
+  } else {
+    // Galaxy — swirl of noise around the origin.
+    float swirl = atan(q.y, q.x) + length(q) * (2.5 + uTwist);
+    pattern = vnoise(vec2(swirl*1.2, length(q)*3.0 - t*0.3));
+  }
+
+  // Bright core & darkening ring, so it reads as a *thing*, not a gradient.
+  float core = smoothstep(0.6, 0.0, r);
+  float halo = smoothstep(0.15, 0.6, r) * smoothstep(1.2, 0.6, r);
+
+  vec3 col = palette(pattern * 0.8 + r * 0.2 + t*0.03);
+  col *= 0.35 + 0.9 * pattern;
+  col += core * palette(t*0.1) * uBloom * 0.9;
+  col += halo * palette(pattern + 0.3) * 0.15;
+  col = mix(col, vec3(0.02,0.02,0.03), uFog * smoothstep(0.4, 1.4, r));
+  return col;
+}
+
+// -------- Hypercube grid (variant 5) — tesseract wireframe projection
+float sdBoxFrame(vec3 p, vec3 b, float e){
+  p = abs(p) - b;
+  vec3 q = abs(p + e) - e;
+  return min(min(
+    length(max(vec3(p.x, q.y, q.z), 0.0)) + min(max(p.x, max(q.y, q.z)), 0.0),
+    length(max(vec3(q.x, p.y, q.z), 0.0)) + min(max(q.x, max(p.y, q.z)), 0.0)),
+    length(max(vec3(q.x, q.y, p.z), 0.0)) + min(max(q.x, max(q.y, p.z)), 0.0));
+}
+float sceneHyper(vec3 p){
+  float rep = max(1.6 / max(uCells, 1.0), 0.35) * max(uRepeat, 0.6);
+  vec3 q = p;
+  q.xy *= mat2(cos(uTime*0.2), -sin(uTime*0.2), sin(uTime*0.2), cos(uTime*0.2));
+  q.xz *= mat2(cos(uTime*0.15+uTwist), -sin(uTime*0.15+uTwist), sin(uTime*0.15+uTwist), cos(uTime*0.15+uTwist));
+  q = mod(q + rep*0.5, rep) - rep*0.5;
+  float outer = sdBoxFrame(q, vec3(rep*0.42), 0.03);
+  // Inner projected cube (the 4D→3D shadow) — smaller and offset.
+  vec3 s = q;
+  s.xw_swiz;
+  float inner = sdBoxFrame(q * (1.0 + uProjection*0.9), vec3(rep*0.28), 0.025);
+  return min(outer, inner);
+}
 
 // -------- SDFs
 float sdBox(vec3 p, vec3 b){ vec3 q = abs(p)-b; return length(max(q,0.0)) + min(max(q.x, max(q.y,q.z)),0.0); }
