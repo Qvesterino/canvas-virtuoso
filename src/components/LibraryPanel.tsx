@@ -108,6 +108,24 @@ export function LibraryPanel() {
                         </button>
                         <button
                           onClick={() =>
+                            dispatch({
+                              type: "remixWithSnapshot",
+                              snapshotId: s.id,
+                              blend: 0.5,
+                            })
+                          }
+                          disabled={s.artwork.family !== artwork.family}
+                          className="rounded px-1.5 py-0.5 text-[10px] text-mono uppercase tracking-wider text-muted-foreground hover:text-foreground disabled:opacity-30"
+                          title={
+                            s.artwork.family === artwork.family
+                              ? "Remix current artwork 50/50 with this snapshot"
+                              : "Different family — remix unavailable"
+                          }
+                        >
+                          remix
+                        </button>
+                        <button
+                          onClick={() =>
                             dispatch({ type: "deleteSnapshot", snapshotId: s.id })
                           }
                           className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive text-xs"
