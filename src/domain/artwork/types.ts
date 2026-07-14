@@ -39,6 +39,18 @@ export interface ParamSpec {
   default: ParamValue;
   /** Short creative description shown in the inspector. */
   hint?: string;
+  /** If set, this parameter is only meaningful when the family's
+   *  `variantParam` scalar value is one of these integers. The Art
+   *  Controls panel uses this to show variant-specific artistic
+   *  controls (e.g. Kaleidoscope mirrors only appear when the
+   *  Kaleidoscope architecture is selected). */
+  variantOf?: number[];
+  /** Marks this parameter as a *structural identity* control — the
+   *  discrete kind of thing the artwork IS (variant, kernel, mirror
+   *  count, cell tessellation). Recipes lock these on apply so that
+   *  palette/parameter edits and micro-mutation don't erase the
+   *  piece's recognisable shape. */
+  identity?: boolean;
 }
 
 export interface CreativeSystemState {
@@ -143,4 +155,8 @@ export interface Recipe {
   family: FamilyId;
   tagline: string;
   changes: { system: SystemId; path: ParamPath; value: ParamValue }[];
+  /** Optional override — explicit paths to freeze as identity locks
+   *  when this recipe is applied. When omitted the store derives them
+   *  from `ParamSpec.identity` on paths the recipe actually touches. */
+  identityPaths?: ParamPath[];
 }
