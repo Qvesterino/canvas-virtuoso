@@ -17,6 +17,7 @@ import { mutateArtwork as engineMutate, randomizeArtwork as engineRandomize, rem
 import { getFamily, type FamilyDefinition } from "../families/registry";
 import { resolvePalette, type Palette } from "../palettes/library";
 import { findMacro } from "../macros/definitions";
+import { validateRecipe, type RecipeIssue } from "../recipes/normalization";
 
 const MAX_HISTORY = 50;
 const MAX_CHANGELOG = 40;
@@ -86,6 +87,9 @@ export interface AppState {
   activePaletteId: string | null;
   changelog: ChangelogEntry[];
   changelogOpen: boolean;
+  /** Normalisation violations from the most recently applied recipe.
+   *  Surfaced in DiagnosticsHud so authors see exactly which limit failed. */
+  lastRecipeIssues: RecipeIssue[];
 }
 
 export type Command =
@@ -413,6 +417,16 @@ function apply(state: AppState, cmd: Command): AppState {
     case "applyRecipe": {
       const activeFam = state.project.artworks[state.project.activeArtworkId].family;
       if (cmd.recipe.family !== activeFam) return state;
+      const issues = validateRecipe(cmd.recipe);
+      if (issues.length > 0) {
+        // Log to console so authors editing library.ts see it in dev tools,
+        // in addition to the on-screen HUD surface.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[recipe] "${cmd.recipe.name}" fails normalisation:`,
+          issues.map((i) => `${i.path}=${i.value} ${i.side} ${i.category} range [${i.limit.min},${i.limit.max}]`),
+        );
+      }
       const family = getFamily(activeFam);
       const familyIds = familyIdentityPaths(family);
       const touched = cmd.recipe.changes.map((c) => c.path);
@@ -427,7 +441,7 @@ function apply(state: AppState, cmd: Command): AppState {
       // current artwork, so no leftover state from the previous recipe
       // bleeds through.
       const recipeSeed = cmd.recipe.seed ?? hashRecipeSeed(cmd.recipe.id);
-      return withChangelog(state, "recipe", `Applied ${cmd.recipe.name}`, (s) =>
+      const nextState = withChangelog(state, "recipe", `Applied ${cmd.recipe.name}`, (s) =>
         mutateArtwork(s, (a) => {
           const fresh = createArtwork(a.family, a.name, {
             id: a.id,
@@ -459,6 +473,7 @@ function apply(state: AppState, cmd: Command): AppState {
           };
         }),
       );
+      return { ...nextState, lastRecipeIssues: issues };
     }
     case "mutateArtwork": {
       return withChangelog(state, "mutate", "Mutate", (s) =>
@@ -735,6 +750,7 @@ let state: AppState = {
   activePaletteId: null,
   changelog: [],
   changelogOpen: false,
+  lastRecipeIssues: [],
 };
 
 const listeners = new Set<Listener>();
