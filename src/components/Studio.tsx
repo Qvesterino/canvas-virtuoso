@@ -5,6 +5,11 @@ import { BottomDock } from "./BottomDock";
 import { InspectorPanel } from "./InspectorPanel";
 import { LibraryPanel } from "./LibraryPanel";
 import { ExportPanel } from "./ExportPanel";
+import { MacroPanel } from "./MacroPanel";
+import { PalettePanel } from "./PalettePanel";
+import { DiscoverPanel } from "./DiscoverPanel";
+import { DiagnosticsHud } from "./DiagnosticsHud";
+import { OnboardingOverlay } from "./OnboardingOverlay";
 import { dispatch, getState } from "../domain/artwork/store";
 import { bootstrapPersistence } from "../domain/persistence/autosave";
 
@@ -14,6 +19,11 @@ export function Studio() {
   useEffect(() => {
     setHydrated(true);
     void bootstrapPersistence();
+    try {
+      if (localStorage.getItem("shader-lab.onboarded") !== "1") {
+        dispatch({ type: "revealOnboarding" });
+      }
+    } catch {}
 
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -41,10 +51,15 @@ export function Studio() {
     >
       <div className="absolute inset-0">{hydrated && <CanvasHost />}</div>
       <TopBar />
+      {hydrated && <MacroPanel />}
+      {hydrated && <PalettePanel />}
+      {hydrated && <DiscoverPanel />}
       {hydrated && <LibraryPanel />}
       <InspectorPanel />
       <BottomDock />
       {hydrated && <ExportPanel />}
+      {hydrated && <DiagnosticsHud />}
+      {hydrated && <OnboardingOverlay />}
     </div>
   );
 }

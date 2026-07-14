@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Renderer, type RendererStatus } from "../renderer/core";
 import { getState } from "../domain/artwork/store";
+import { publishRendererStatus } from "./DiagnosticsHud";
 
 export function CanvasHost() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -10,7 +11,10 @@ export function CanvasHost() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const renderer = new Renderer(canvas, {
-      onStatusChange: setStatus,
+      onStatusChange: (s) => {
+        setStatus(s);
+        publishRendererStatus(s);
+      },
       getArtwork: () => {
         const s = getState();
         return s.project.artworks[s.project.activeArtworkId];
@@ -46,12 +50,6 @@ export function CanvasHost() {
           <div className="panel-surface px-4 py-2 text-xs text-mono">
             {status.reason}
           </div>
-        </div>
-      )}
-      {status.kind === "running" && (
-        <div className="pointer-events-none absolute right-4 top-20 flex items-center gap-2 text-mono text-[10px] text-muted-foreground">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px] shadow-primary" />
-          {status.family} · {status.fps} fps
         </div>
       )}
     </div>

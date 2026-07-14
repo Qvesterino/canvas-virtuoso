@@ -13,6 +13,9 @@ import type {
 } from "./types";
 import { createProject, createArtwork, newSnapshotId } from "./factories";
 import { mutateArtwork as engineMutate, randomizeArtwork as engineRandomize, remixArtworks } from "../mutation/engine";
+import { getFamily } from "../families/registry";
+import { resolvePalette, type Palette } from "../palettes/library";
+import { findMacro } from "../macros/definitions";
 
 const MAX_HISTORY = 50;
 
@@ -27,6 +30,9 @@ export interface AppState {
   memoryFrozen: boolean;
   memoryClearNonce: number;
   exportOpen: boolean;
+  onboardingDismissed: boolean;
+  diagnosticsOpen: boolean;
+  activePaletteId: string | null;
 }
 
 export type Command =
@@ -58,7 +64,12 @@ export type Command =
   | { type: "clearMemory" }
   | { type: "setExportOpen"; open: boolean }
   | { type: "hydrateProject"; project: Project }
-  | { type: "markHydrated" };
+  | { type: "markHydrated" }
+  | { type: "applyPalette"; palette: Palette }
+  | { type: "applyMacro"; macroId: string; value: number }
+  | { type: "dismissOnboarding" }
+  | { type: "revealOnboarding" }
+  | { type: "toggleDiagnostics" };
 
 type Listener = () => void;
 
@@ -340,6 +351,58 @@ function apply(state: AppState, cmd: Command): AppState {
     case "markHydrated": {
       return state.hydrated ? state : { ...state, hydrated: true };
     }
+    case "dismissOnboarding": {
+      if (state.onboardingDismissed) return state;
+      try {
+        localStorage.setItem("shader-lab.onboarded", "1");
+      } catch {}
+      return { ...state, onboardingDismissed: true };
+    }
+    case "revealOnboarding": {
+      return state.onboardingDismissed ? { ...state, onboardingDismissed: false } : state;
+    }
+    case "toggleDiagnostics": {
+      return { ...state, diagnosticsOpen: !state.diagnosticsOpen };
+    }
+    case "applyPalette": {
+      const family = getFamily(state.project.artworks[state.project.activeArtworkId].family);
+      const changes = resolvePalette(cmd.palette, family.schema);
+      if (changes.length === 0) return { ...state, activePaletteId: cmd.palette.id };
+      const next = mutateArtwork(state, (a) => {
+        const systems = { ...a.systems };
+        for (const change of changes) {
+          if (isLocked(a, change.path) || isLocked(a, `system:${change.system}`)) continue;
+          const sys = systems[change.system];
+          if (!sys) continue;
+          systems[change.system] = {
+            ...sys,
+            parameters: { ...sys.parameters, [change.path]: change.value },
+          };
+        }
+        return { ...a, systems };
+      });
+      return { ...next, activePaletteId: cmd.palette.id };
+    }
+    case "applyMacro": {
+      const macro = findMacro(cmd.macroId);
+      if (!macro) return state;
+      const v = Math.max(0, Math.min(1, cmd.value));
+      return mutateArtwork(state, (a) => {
+        if (a.family !== macro.family) return a;
+        const systems = { ...a.systems };
+        for (const eff of macro.effects) {
+          if (isLocked(a, eff.path) || isLocked(a, `system:${eff.system}`)) continue;
+          const sys = systems[eff.system];
+          if (!sys) continue;
+          const value = eff.low + (eff.high - eff.low) * v;
+          systems[eff.system] = {
+            ...sys,
+            parameters: { ...sys.parameters, [eff.path]: value },
+          };
+        }
+        return { ...a, systems };
+      });
+    }
     case "switchFamily":
     case "newArtwork": {
       const artwork = createArtwork(cmd.family, "New Artwork");
@@ -347,6 +410,7 @@ function apply(state: AppState, cmd: Command): AppState {
         ...state,
         inspectedSystem: "form",
         history: { past: [], future: [] },
+        activePaletteId: null,
         project: {
           ...state.project,
           updatedAt: Date.now(),
@@ -371,6 +435,9 @@ let state: AppState = {
   memoryFrozen: false,
   memoryClearNonce: 0,
   exportOpen: false,
+  onboardingDismissed: true, // SSR-safe default; client re-reads in effect
+  diagnosticsOpen: false,
+  activePaletteId: null,
 };
 
 const listeners = new Set<Listener>();
