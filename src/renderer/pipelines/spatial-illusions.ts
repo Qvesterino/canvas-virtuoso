@@ -8,9 +8,12 @@ out vec4 outColor;
 uniform vec2  uResolution;
 uniform float uTime;
 uniform float uSeed;
+uniform float uVariant;
 uniform float uDepth;
 uniform float uTwist;
 uniform float uRings;
+uniform float uRepeat;
+uniform float uCameraSway;
 uniform float uSpeed;
 uniform float uWarble;
 uniform float uBloom;
@@ -24,34 +27,150 @@ vec3 palette(float t){
   vec3 d = vec3(uHue, uHue + 0.33, uHue + 0.66);
   return a + b * cos(6.28318 * (c*t + d));
 }
+mat2 rot2(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
+
+// -------- SDFs
+float sdBox(vec3 p, vec3 b){ vec3 q = abs(p)-b; return length(max(q,0.0)) + min(max(q.x, max(q.y,q.z)),0.0); }
+float sdCyl(vec3 p, float r, float h){
+  vec2 d = vec2(length(p.xz) - r, abs(p.y) - h);
+  return min(max(d.x, d.y), 0.0) + length(max(d,0.0));
+}
+float sdCross(vec3 p, float s){
+  float d1 = sdBox(p, vec3(1e4, s, s));
+  float d2 = sdBox(p, vec3(s, 1e4, s));
+  float d3 = sdBox(p, vec3(s, s, 1e4));
+  return min(d1, min(d2, d3));
+}
+
+// ---- variants
+// 0 — Ring tunnel (procedural post-effect style, not raymarched)
+vec3 tunnelRings(vec2 uv, float t){
+  vec2 p = uv;
+  float r = length(p);
+  float a = atan(p.y, p.x);
+  float w = sin(a*3.0 + uTime*1.3) * uWarble * 0.05;
+  r += w;
+  float z = uDepth / max(r, 0.001) + uTime*uSpeed;
+  float ta = a + z*uTwist*0.3 + uSeed*0.0005;
+  float ringCount = max(uRings, 2.0);
+  float ring = fract(z * 0.5);
+  float ridge = smoothstep(0.02, 0.5, abs(ring - 0.5));
+  float stripes = 0.5 + 0.5*sin(ta*ringCount);
+  float pattern = mix(ridge, stripes, 0.5);
+  float depthFade = 1.0 - smoothstep(0.0, 1.6, r);
+  vec3 col = palette(pattern*0.7 + z*0.02) * (0.2 + 0.9*depthFade);
+  col += pow(depthFade, 3.0) * uBloom * palette(z*0.05);
+  col = mix(col, vec3(0.02,0.02,0.03), uFog * (1.0 - depthFade));
+  return col;
+}
+
+// 1 — Hall of columns (raymarched)
+float sceneHall(vec3 p){
+  // repeated columns along XZ, floor and ceiling
+  float rep = max(uRepeat, 0.6);
+  vec3 q = p;
+  q.xz = mod(q.xz + rep*0.5, rep) - rep*0.5;
+  float col = sdCyl(q, 0.18 + 0.05*sin(p.y*0.4 + uTime*0.5), 6.0);
+  float floorD = p.y + 1.2;
+  float ceilD = 1.2 - p.y;
+  return min(col, min(floorD, ceilD));
+}
+
+// 2 — Menger fractal
+float sceneMenger(vec3 p){
+  float d = sdBox(p, vec3(1.2));
+  float s = 1.0;
+  for (int m = 0; m < 4; m++){
+    vec3 a = mod(p*s, 2.0) - 1.0;
+    s *= 3.0;
+    vec3 r = 1.0 - 3.0*abs(a);
+    float c = (min(max(r.x, r.y), min(max(r.y,r.z), max(r.z,r.x)))) / s;
+    d = max(d, c);
+  }
+  return d;
+}
+
+// 3 — Cathedral: arches and vaults via repeated boxes with negated cylinders
+float sceneCathedral(vec3 p){
+  float rep = max(uRepeat, 0.8);
+  vec3 q = p;
+  q.z = mod(q.z + rep*0.5, rep) - rep*0.5;
+  float pillar = sdBox(vec3(q.x - sign(q.x)*1.0, q.y*0.8, q.z), vec3(0.14, 1.6, 0.14));
+  // Arch cutouts
+  vec3 a1 = vec3(q.x, q.y - 0.6, q.z);
+  a1.y *= 1.4;
+  float arch = length(a1) - 0.9;
+  float wall = sdBox(vec3(q.x, q.y, q.z), vec3(1.2, 1.4, 0.08));
+  float wallCut = max(wall, -arch);
+  float floorD = p.y + 1.3;
+  float ceilD = sdBox(vec3(p.x, p.y - 1.6, q.z), vec3(1.4, 0.1, 0.6)) - 0.05;
+  return min(min(pillar, wallCut), min(floorD, ceilD));
+}
+
+float sceneRM(vec3 p){
+  int v = int(clamp(uVariant, 0.0, 3.0));
+  if (v == 1) return sceneHall(p);
+  if (v == 2) return sceneMenger(p);
+  return sceneCathedral(p);
+}
+vec3 normalRM(vec3 p){
+  vec2 e = vec2(0.002, 0.0);
+  return normalize(vec3(
+    sceneRM(p+e.xyy) - sceneRM(p-e.xyy),
+    sceneRM(p+e.yxy) - sceneRM(p-e.yxy),
+    sceneRM(p+e.yyx) - sceneRM(p-e.yyx)));
+}
+
+vec3 renderRaymarched(vec2 uv){
+  // camera moves forward through repeat units
+  float t = uTime * uSpeed;
+  vec3 ro = vec3(sin(t*0.3)*uCameraSway*0.6, 0.15*sin(t*0.4)*uCameraSway, t*0.6);
+  vec3 fwd = normalize(vec3(sin(t*0.15)*uCameraSway*0.15, -0.05, 1.0));
+  vec3 right = normalize(cross(vec3(0,1,0), fwd));
+  vec3 up = cross(fwd, right);
+  vec3 rd = normalize(fwd*1.4 + right*uv.x + up*uv.y);
+
+  float tHit = 0.0;
+  float minD = 1e3;
+  bool hit = false;
+  vec3 p = ro;
+  for (int i = 0; i < 128; i++){
+    p = ro + rd*tHit;
+    float d = sceneRM(p);
+    minD = min(minD, d);
+    if (d < 0.001){ hit = true; break; }
+    tHit += d * 0.9;
+    if (tHit > 40.0) break;
+  }
+
+  vec3 base = vec3(0.02, 0.025, 0.035);
+  if (hit){
+    vec3 n = normalRM(p);
+    vec3 L = normalize(vec3(0.4, 0.8, -0.3));
+    float diff = clamp(dot(n, L), 0.0, 1.0);
+    float ambient = 0.15;
+    float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 3.0);
+    float depthT = clamp(tHit / 30.0, 0.0, 1.0);
+    vec3 col = palette(depthT*0.6 + p.z*0.03) * (ambient + 0.9*diff);
+    col += fres * palette(0.2 + depthT) * uBloom * 0.5;
+    // volumetric fog along ray
+    float fog = 1.0 - exp(-depthT * (1.5 + uFog*4.0));
+    col = mix(col, palette(0.7)*0.15 + vec3(0.02,0.02,0.03), fog);
+    return col;
+  }
+  // sky / end-of-corridor glow
+  float glow = exp(-minD * (2.0 + uFog*4.0));
+  return base + palette(0.5) * glow * uBloom;
+}
 
 void main(){
   vec2 uv = (vUv - 0.5) * vec2(uResolution.x/uResolution.y, 1.0);
-  float r = length(uv);
-  float a = atan(uv.y, uv.x);
+  int variant = int(clamp(uVariant, 0.0, 3.0));
+  vec3 col;
+  if (variant == 0) col = tunnelRings(uv, uTime);
+  else col = renderRaymarched(uv);
 
-  // Warble the ring for a wobble in space
-  float w = sin(a * 3.0 + uTime * 1.3) * uWarble * 0.05;
-  r += w;
-
-  // Tunnel depth coordinate
-  float z = uDepth / max(r, 0.001) + uTime * uSpeed;
-  // Twist per depth slice
-  float ta = a + z * uTwist * 0.3 + uSeed * 0.0005;
-
-  float ringCount = max(uRings, 2.0);
-  float ring = fract(z * 0.5) ;
-  float ridge = smoothstep(0.02, 0.5, abs(ring - 0.5)) ;
-
-  float stripes = 0.5 + 0.5 * sin(ta * ringCount);
-  float pattern = mix(ridge, stripes, 0.5);
-
-  float depthFade = 1.0 - smoothstep(0.0, 1.6, r);
-  vec3 col = palette(pattern * 0.7 + z * 0.02) * (0.2 + 0.9 * depthFade);
-  col += pow(depthFade, 3.0) * uBloom * palette(z * 0.05);
-  col = mix(col, vec3(0.02, 0.02, 0.03), uFog * (1.0 - depthFade));
   col = pow(col, vec3(uContrast));
-
   float d = length(vUv - 0.5);
   col *= mix(1.0, smoothstep(0.9, 0.15, d), uVignette);
   outColor = vec4(pow(max(col, 0.0), vec3(1.0/2.2)), 1.0);
@@ -63,16 +182,19 @@ export const spatialIllusionsPipeline: Pipeline = {
   vs: BASE_VS,
   fs: FS,
   uniforms: [
-    "uDepth", "uTwist", "uRings",
+    "uVariant", "uDepth", "uTwist", "uRings", "uRepeat", "uCameraSway",
     "uSpeed", "uWarble",
     "uBloom", "uFog",
     "uHue", "uContrast", "uVignette",
   ],
   project(artwork) {
     return {
+      uVariant: paramNum(artwork, "form", "form.variant", 0),
       uDepth: paramNum(artwork, "form", "form.depth", 1.2),
       uTwist: paramNum(artwork, "form", "form.twist", 0.5),
       uRings: paramNum(artwork, "form", "form.rings", 10),
+      uRepeat: paramNum(artwork, "form", "form.repeat", 1.6),
+      uCameraSway: paramNum(artwork, "form", "form.cameraSway", 0.35),
       uSpeed: paramNum(artwork, "motion", "motion.speed", 0.35),
       uWarble: paramNum(artwork, "motion", "motion.warble", 0.25),
       uBloom: paramNum(artwork, "light", "light.bloom", 0.55),
