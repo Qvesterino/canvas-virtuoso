@@ -221,7 +221,13 @@ vec3 normalRM(vec3 p){
 vec3 renderRaymarched(vec2 uv){
   // camera moves forward through repeat units
   float t = uTime * uSpeed;
-  vec3 ro = vec3(sin(t*0.3)*uCameraSway*0.6, 0.15*sin(t*0.4)*uCameraSway, t*0.6);
+  int vr = int(clamp(uVariant, 0.0, 5.0));
+  // The Menger fractal fills a 1.2-radius cube around the origin — starting
+  // the camera at z≈0 puts every ray immediately inside a solid, which
+  // returned a hit at ro with a zero normal and rendered as black.
+  // Pull the camera back so we descend TOWARD the fractal instead.
+  float zStart = (vr == 2) ? -3.5 : 0.0;
+  vec3 ro = vec3(sin(t*0.3)*uCameraSway*0.6, 0.15*sin(t*0.4)*uCameraSway, zStart + t*0.6);
   vec3 fwd = normalize(vec3(sin(t*0.15)*uCameraSway*0.15, -0.05, 1.0));
   vec3 right = normalize(cross(vec3(0,1,0), fwd));
   vec3 up = cross(fwd, right);
