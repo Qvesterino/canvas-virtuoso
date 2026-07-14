@@ -1,15 +1,6 @@
-import type { Artwork } from "../../domain/artwork/types";
+import { BASE_VS, paramNum, type Pipeline } from "./types";
 
-export const LIVING_FIELDS_VS = `#version 300 es
-layout(location = 0) in vec2 aPos;
-out vec2 vUv;
-void main() {
-  vUv = aPos * 0.5 + 0.5;
-  gl_Position = vec4(aPos, 0.0, 1.0);
-}
-`;
-
-export const LIVING_FIELDS_FS = `#version 300 es
+const FS = `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 outColor;
@@ -102,38 +93,31 @@ void main(){
 }
 `;
 
-export interface LivingFieldsUniforms {
-  density: number; detail: number; warp: number;
-  speed: number; turbulence: number; drift: number;
-  hue: number; spread: number; contrast: number; luminosity: number;
-  bloom: number; grain: number; vignette: number;
-  seed: number;
-}
-
-function num(v: unknown, fallback: number): number {
-  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
-}
-
-export function projectLivingFields(artwork: Artwork): LivingFieldsUniforms {
-  const p = (system: string, path: string, fallback: number): number => {
-    const sys = artwork.systems[system as keyof typeof artwork.systems];
-    if (!sys || sys.bypassed || !sys.enabled) return fallback;
-    return num(sys.parameters[path], fallback);
-  };
-  return {
-    density: p("form", "form.density", 2.2),
-    detail: p("form", "form.detail", 4),
-    warp: p("form", "form.warp", 0.85),
-    speed: p("motion", "motion.speed", 0.35),
-    turbulence: p("motion", "motion.turbulence", 0.6),
-    drift: p("motion", "motion.drift", 0.15),
-    hue: p("color", "color.hue", 0.55),
-    spread: p("color", "color.spread", 0.35),
-    contrast: p("color", "color.contrast", 1.05),
-    luminosity: p("color", "color.luminosity", 0.95),
-    bloom: p("light", "light.bloom", 0.55),
-    grain: p("light", "light.grain", 0.04),
-    vignette: p("output", "output.vignette", 0.35),
-    seed: artwork.artworkSeed,
-  };
-}
+export const livingFieldsPipeline: Pipeline = {
+  id: "living-fields",
+  vs: BASE_VS,
+  fs: FS,
+  uniforms: [
+    "uDensity", "uDetail", "uWarp",
+    "uSpeed", "uTurbulence", "uDrift",
+    "uHue", "uSpread", "uContrast", "uLuminosity",
+    "uBloom", "uGrain", "uVignette",
+  ],
+  project(artwork) {
+    return {
+      uDensity: paramNum(artwork, "form", "form.density", 2.2),
+      uDetail: paramNum(artwork, "form", "form.detail", 4),
+      uWarp: paramNum(artwork, "form", "form.warp", 0.85),
+      uSpeed: paramNum(artwork, "motion", "motion.speed", 0.35),
+      uTurbulence: paramNum(artwork, "motion", "motion.turbulence", 0.6),
+      uDrift: paramNum(artwork, "motion", "motion.drift", 0.15),
+      uHue: paramNum(artwork, "color", "color.hue", 0.55),
+      uSpread: paramNum(artwork, "color", "color.spread", 0.35),
+      uContrast: paramNum(artwork, "color", "color.contrast", 1.05),
+      uLuminosity: paramNum(artwork, "color", "color.luminosity", 0.95),
+      uBloom: paramNum(artwork, "light", "light.bloom", 0.55),
+      uGrain: paramNum(artwork, "light", "light.grain", 0.04),
+      uVignette: paramNum(artwork, "output", "output.vignette", 0.35),
+    };
+  },
+};
