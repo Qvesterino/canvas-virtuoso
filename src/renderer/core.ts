@@ -5,6 +5,15 @@ import type { Artwork, FamilyId } from "../domain/artwork/types";
 import { TimeSource } from "../services/time";
 import { sampleSignals } from "../services/signals";
 import { applyModulation } from "../domain/modulation/engine";
+import {
+  BLIT_FS,
+  clearFeedback,
+  createFeedback,
+  disposeFeedback,
+  swapFeedback,
+  type FeedbackBuffers,
+} from "./feedback";
+import { BASE_VS } from "./pipelines/types";
 
 export type RendererStatus =
   | { kind: "idle" }
@@ -16,6 +25,8 @@ export interface RendererHooks {
   onStatusChange: (status: RendererStatus) => void;
   getArtwork: () => Artwork;
   isPlaying: () => boolean;
+  isMemoryFrozen?: () => boolean;
+  getMemoryClearNonce?: () => number;
 }
 
 export class Renderer {
@@ -34,6 +45,11 @@ export class Renderer {
   private ro: ResizeObserver | null = null;
   private activeFamily: FamilyId | null = null;
   private pipeline: Pipeline | null = null;
+  private feedback: FeedbackBuffers | null = null;
+  private blitProgram: WebGLProgram | null = null;
+  private blitTexLoc: WebGLUniformLocation | null = null;
+  private prevSamplerLoc: WebGLUniformLocation | null = null;
+  private lastClearNonce = 0;
 
   constructor(canvas: HTMLCanvasElement, hooks: RendererHooks) {
     this.canvas = canvas;
@@ -59,6 +75,13 @@ export class Renderer {
     this.canvas.addEventListener("webglcontextrestored", this.onContextRestored, false);
 
     this.quad = createFullscreenQuad(gl);
+    const blit = buildProgram(gl, BASE_VS, BLIT_FS);
+    if ("error" in blit) {
+      this.setStatus({ kind: "degraded", reason: `Blit compile failed: ${blit.error}` });
+      return false;
+    }
+    this.blitProgram = blit.program;
+    this.blitTexLoc = gl.getUniformLocation(this.blitProgram, "uTex");
     const artwork = this.hooks.getArtwork();
     if (!this.usePipeline(artwork.family)) return false;
     this.time.reset();
@@ -80,6 +103,9 @@ export class Renderer {
     for (const n of this.pipeline.uniforms) {
       this.uniforms.set(n, gl.getUniformLocation(this.program, n));
     }
+    this.prevSamplerLoc = this.pipeline.feedback
+      ? gl.getUniformLocation(this.program, "uPrev")
+      : null;
   }
 
   private usePipeline(family: FamilyId): boolean {
@@ -96,7 +122,25 @@ export class Renderer {
     this.pipeline = pipeline;
     this.activeFamily = family;
     this.cacheUniforms();
+    this.ensureFeedback();
     return true;
+  }
+
+  private ensureFeedback() {
+    if (!this.gl) return;
+    const need = !!this.pipeline?.feedback;
+    if (!need) {
+      if (this.feedback) {
+        disposeFeedback(this.gl, this.feedback);
+        this.feedback = null;
+      }
+      return;
+    }
+    const w = Math.max(1, this.canvas.width);
+    const h = Math.max(1, this.canvas.height);
+    if (this.feedback && this.feedback.width === w && this.feedback.height === h) return;
+    if (this.feedback) disposeFeedback(this.gl, this.feedback);
+    this.feedback = createFeedback(this.gl, w, h);
   }
 
   private onContextLost = (e: Event) => {
@@ -108,6 +152,9 @@ export class Renderer {
   private onContextRestored = () => {
     if (!this.gl) return;
     this.quad = createFullscreenQuad(this.gl);
+    if (this.feedback) {
+      this.feedback = null; // texture handles are gone
+    }
     const family = this.hooks.getArtwork().family;
     if (!this.usePipeline(family)) return;
     this.setStatus({ kind: "running", family, fps: 0 });
@@ -123,6 +170,7 @@ export class Renderer {
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
+      this.ensureFeedback();
     }
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
   }
@@ -150,10 +198,40 @@ export class Renderer {
         if (!this.usePipeline(artwork.family)) return;
       }
       const gl = this.gl;
+
+      // Handle clear-memory requests from the store.
+      if (this.hooks.getMemoryClearNonce) {
+        const nonce = this.hooks.getMemoryClearNonce();
+        if (nonce !== this.lastClearNonce) {
+          this.lastClearNonce = nonce;
+          if (this.feedback) clearFeedback(gl, this.feedback);
+        }
+      }
+
+      const frozen = this.hooks.isMemoryFrozen?.() ?? false;
+      const useFeedback = !!this.pipeline?.feedback && !!this.feedback;
+
+      if (useFeedback && frozen) {
+        // Skip the shader pass; just show the last captured frame.
+        this.blitToScreen(this.feedback!.read);
+      } else {
+        // Render into feedback FBO if applicable, otherwise straight to screen.
+        if (useFeedback) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, this.feedback!.writeFbo);
+          gl.viewport(0, 0, this.feedback!.width, this.feedback!.height);
+        }
+
       gl.useProgram(this.program);
       this.setUniform("uResolution", [this.canvas.width, this.canvas.height]);
       this.setUniform("uTime", t);
       this.setUniform("uSeed", artwork.artworkSeed);
+
+        if (useFeedback && this.prevSamplerLoc) {
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, this.feedback!.read);
+          gl.uniform1i(this.prevSamplerLoc, 0);
+        }
+
       const values = this.pipeline!.project(artwork);
       for (const name of this.pipeline!.uniforms) {
         const v = values[name];
@@ -162,6 +240,15 @@ export class Renderer {
       gl.bindVertexArray(this.quad.vao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.bindVertexArray(null);
+
+        if (useFeedback) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+          this.blitToScreen(this.feedback!.write);
+          swapFeedback(this.feedback!);
+        }
+      }
+
       this.lastFrameOk = true;
     } catch (err) {
       if (this.lastFrameOk) {
@@ -186,15 +273,31 @@ export class Renderer {
     this.raf = requestAnimationFrame(this.loop);
   };
 
+  private blitToScreen(tex: WebGLTexture) {
+    const gl = this.gl!;
+    if (!this.blitProgram || !this.quad) return;
+    gl.useProgram(this.blitProgram);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    if (this.blitTexLoc) gl.uniform1i(this.blitTexLoc, 0);
+    gl.bindVertexArray(this.quad.vao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindVertexArray(null);
+  }
+
   dispose() {
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     this.canvas.removeEventListener("webglcontextlost", this.onContextLost);
     this.canvas.removeEventListener("webglcontextrestored", this.onContextRestored);
     if (this.gl && this.program) this.gl.deleteProgram(this.program);
+    if (this.gl && this.blitProgram) this.gl.deleteProgram(this.blitProgram);
+    if (this.gl && this.feedback) disposeFeedback(this.gl, this.feedback);
     this.quad?.dispose();
     this.gl = null;
     this.program = null;
+    this.blitProgram = null;
+    this.feedback = null;
     this.quad = null;
   }
 }

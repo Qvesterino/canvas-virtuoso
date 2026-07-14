@@ -13,7 +13,9 @@ export function TopBar() {
   const artwork = useActiveArtwork();
   const canUndo = useAppState((s) => s.history.past.length > 0);
   const canRedo = useAppState((s) => s.history.future.length > 0);
+  const memoryFrozen = useAppState((s) => s.memoryFrozen);
   const family = getFamily(artwork.family);
+  const hasMemory = !!artwork.systems.memory;
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-4">
@@ -50,7 +52,37 @@ export function TopBar() {
         </div>
       </div>
 
-      <div className="panel-surface pointer-events-auto flex items-center overflow-hidden p-1">
+      <div className="panel-surface pointer-events-auto flex items-center gap-1 p-1">
+        {hasMemory && (
+          <>
+            <button
+              onClick={() => dispatch({ type: "setMemoryFrozen", frozen: !memoryFrozen })}
+              className={[
+                "rounded-md px-3 py-1.5 text-mono text-[10px] uppercase tracking-wider hover:bg-white/5",
+                memoryFrozen ? "text-signal" : "text-muted-foreground",
+              ].join(" ")}
+              title="Stop writing new frames into the feedback buffer"
+            >
+              {memoryFrozen ? "Frozen" : "Freeze"}
+            </button>
+            <button
+              onClick={() => dispatch({ type: "clearMemory" })}
+              className="rounded-md px-3 py-1.5 text-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-white/5"
+              title="Clear the feedback buffer"
+            >
+              Clear
+            </button>
+            <span className="h-4 w-px bg-panel-border" />
+          </>
+        )}
+        <button
+          onClick={() => dispatch({ type: "setExportOpen", open: true })}
+          className="rounded-md px-3 py-1.5 text-mono text-[10px] uppercase tracking-wider text-foreground hover:bg-white/5"
+          title="Deterministic export"
+        >
+          Export
+        </button>
+        <span className="h-4 w-px bg-panel-border" />
         {MODES.map((m) => (
           <button
             key={m.id}
