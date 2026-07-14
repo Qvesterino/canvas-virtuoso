@@ -121,8 +121,26 @@ export interface Project {
   updatedAt: number;
   activeArtworkId: string;
   artworks: Record<string, Artwork>;
+  snapshots: Snapshot[];
   schemaVersion: 1;
 }
 
 /** Human-facing mode of the workspace — a level of disclosure, not a new artwork. */
 export type WorkspaceMode = "discover" | "sculpt" | "expert";
+
+export interface Snapshot {
+  id: string;
+  name: string;
+  createdAt: number;
+  artworkId: string;
+  /** Frozen artwork snapshot. */
+  artwork: Artwork;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  family: FamilyId;
+  tagline: string;
+  changes: { system: SystemId; path: ParamPath; value: ParamValue }[];
+}

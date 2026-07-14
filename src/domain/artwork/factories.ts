@@ -8,8 +8,11 @@ import type {
 } from "./types";
 import { getFamily } from "../families/registry";
 
+let idCounter = 0;
 function rid(prefix: string): string {
-  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+  idCounter++;
+  const rand = Math.floor(Math.random() * 0xffffffff).toString(36);
+  return `${prefix}_${rand}${idCounter.toString(36)}`;
 }
 
 function hash32(input: string): number {
@@ -21,10 +24,20 @@ function hash32(input: string): number {
   return h >>> 0;
 }
 
-export function createArtwork(family: FamilyId, name = "Untitled Artwork"): Artwork {
+export interface CreateArtworkOptions {
+  seed?: number;
+  id?: string;
+  createdAt?: number;
+}
+
+export function createArtwork(
+  family: FamilyId,
+  name = "Untitled Artwork",
+  opts: CreateArtworkOptions = {},
+): Artwork {
   const def = getFamily(family);
-  const now = Date.now();
-  const artworkSeed = Math.floor(Math.random() * 2 ** 31);
+  const now = opts.createdAt ?? Date.now();
+  const artworkSeed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
 
   const systems: Partial<Record<SystemId, CreativeSystemState>> = {};
   const buildSystem = (systemId: SystemId): CreativeSystemState | null => {
@@ -55,7 +68,7 @@ export function createArtwork(family: FamilyId, name = "Untitled Artwork"): Artw
   }
 
   return {
-    id: rid("art"),
+    id: opts.id ?? rid("art"),
     revision: 1,
     schemaVersion: 1,
     family,
@@ -77,7 +90,27 @@ export function createArtwork(family: FamilyId, name = "Untitled Artwork"): Artw
   };
 }
 
-export function createProject(family: FamilyId = "living-fields"): Project {
+export function createProject(
+  family: FamilyId = "living-fields",
+  opts: { deterministic?: boolean } = {},
+): Project {
+  if (opts.deterministic) {
+    const artwork = createArtwork(family, "First Field", {
+      seed: 1,
+      id: "art_initial",
+      createdAt: 0,
+    });
+    return {
+      id: "prj_initial",
+      name: "Untitled Project",
+      createdAt: 0,
+      updatedAt: 0,
+      activeArtworkId: artwork.id,
+      artworks: { [artwork.id]: artwork },
+      snapshots: [],
+      schemaVersion: 1,
+    };
+  }
   const artwork = createArtwork(family, "First Field");
   return {
     id: rid("prj"),
@@ -86,6 +119,11 @@ export function createProject(family: FamilyId = "living-fields"): Project {
     updatedAt: artwork.updatedAt,
     activeArtworkId: artwork.id,
     artworks: { [artwork.id]: artwork },
+    snapshots: [],
     schemaVersion: 1,
   };
+}
+
+export function newSnapshotId(): string {
+  return rid("snap");
 }

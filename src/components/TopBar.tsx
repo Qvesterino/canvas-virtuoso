@@ -11,6 +11,8 @@ const MODES: { id: WorkspaceMode; label: string; hint: string }[] = [
 export function TopBar() {
   const mode = useAppState((s) => s.mode);
   const artwork = useActiveArtwork();
+  const canUndo = useAppState((s) => s.history.past.length > 0);
+  const canRedo = useAppState((s) => s.history.future.length > 0);
   const family = getFamily(artwork.family);
 
   return (
@@ -26,6 +28,25 @@ export function TopBar() {
           <span className="text-mono text-[10px] text-muted-foreground">
             {family.name} · rev {artwork.revision}
           </span>
+        </div>
+        <span className="h-4 w-px bg-panel-border" />
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => dispatch({ type: "undo" })}
+            disabled={!canUndo}
+            className="rounded px-2 py-1 text-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground disabled:opacity-30"
+            title="Undo (⌘Z)"
+          >
+            Undo
+          </button>
+          <button
+            onClick={() => dispatch({ type: "redo" })}
+            disabled={!canRedo}
+            className="rounded px-2 py-1 text-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground disabled:opacity-30"
+            title="Redo (⇧⌘Z)"
+          >
+            Redo
+          </button>
         </div>
       </div>
 
