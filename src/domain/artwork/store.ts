@@ -663,7 +663,7 @@ function apply(state: AppState, cmd: Command): AppState {
       const macro = findMacro(cmd.macroId);
       if (!macro) return state;
       const v = Math.max(0, Math.min(1, cmd.value));
-      return withChangelog(state, "macro", `Macro · ${macro.name}`, (s) =>
+      return withChangelog(state, "macro", `Macro · ${macro.label}`, (s) =>
         mutateArtwork(s, (a) => {
         if (a.family !== macro.family) return a;
         const systems = { ...a.systems };
