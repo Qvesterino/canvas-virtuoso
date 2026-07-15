@@ -10,6 +10,7 @@ import { ExportPanel } from "./ExportPanel";
 import { MacroPanel } from "./MacroPanel";
 import { PalettePanel } from "./PalettePanel";
 import { DiscoverPanel } from "./DiscoverPanel";
+import { DirectorBar } from "./DirectorBar";
 import { DiagnosticsHud } from "./DiagnosticsHud";
 import { OnboardingOverlay } from "./OnboardingOverlay";
 import { dispatch, getState } from "../domain/artwork/store";
@@ -53,6 +54,7 @@ export function Studio() {
     >
       <div className="absolute inset-0">{hydrated && <CanvasHost />}</div>
       <TopBar />
+      {hydrated && <DirectorBar />}
       {hydrated && <MacroPanel />}
       {hydrated && <PalettePanel />}
       {hydrated && <DiscoverPanel />}
